@@ -42,6 +42,17 @@ export const config = {
     baseUrl: process.env.WAHA_BASE_URL || 'http://localhost:3003',
     session: process.env.WAHA_SESSION || 'default',
     apiKey: process.env.WAHA_API_KEY || '',
+    // "digitando..." antes de cada envio real (anti-bloqueio).
+    digitando: bool(process.env.WHATSAPP_DIGITANDO, true),
+    // Converter link pelo WhatsApp: voce manda um link no privado do numero
+    // de divulgacao e recebe o post pronto. Sem chave = desligado.
+    webhookChave: process.env.WHATSAPP_WEBHOOK_CHAVE || '',
+    autorizados: String(process.env.WHATSAPP_NUMEROS_AUTORIZADOS || '')
+      .split(',').map((n) => n.trim()).filter(Boolean),
+  },
+  // Canal/grupo do Telegram: bot criado no @BotFather, admin do canal.
+  telegram: {
+    token: process.env.TELEGRAM_BOT_TOKEN || '',
   },
   n8n: {
     baseUrl: process.env.N8N_BASE_URL || 'http://localhost:5678',

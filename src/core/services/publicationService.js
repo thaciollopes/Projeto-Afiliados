@@ -16,7 +16,9 @@ import { bestCouponFor, registerUse } from './couponService.js';
 import { exigeLinkDoPainel, lojaBase } from './affiliateLinkService.js';
 import { podeConverter, converterProdutosDaLoja } from './linkPorCookieService.js';
 import { verificarProduto } from './verificacaoLinkService.js';
-import { getWhatsAppProvider } from '../../integrations/whatsapp/index.js';
+import { seloMenorPreco } from './historicoPrecoService.js';
+import { linkParaCanal, subIdDoCanal } from './linkPorCanalService.js';
+import { mensageiroDo, precisaPausaAntiBloqueio } from '../../integrations/mensageiros.js';
 import { generate } from '../../integrations/ai/index.js';
 import { config } from '../../config/index.js';
 import { nowIso, localHHMM, hhmmToMinutes, localDay, addMinutes } from '../utils/dates.js';
@@ -37,6 +39,7 @@ export const MAX_TENTATIVAS = RETRY_MINUTOS.length;
  */
 export async function buildPublication({
   product_id, promotion_id, coupon_id, template_id, usar_ia = false, reference = new Date(),
+  channel_id = null,
 } = {}) {
   let produto = productRepository.findById(product_id);
   if (!produto) throw notFound('Produto');
@@ -60,6 +63,18 @@ export async function buildPublication({
     conferencia = await verificarProduto(produto);
   } catch (err) {
     log.warn(`Nao consegui conferir o link de afiliado: ${err.message}`, { product_id });
+  }
+
+  // Com o grupo conhecido, a Shopee ganha um link com o sub ID do grupo (so
+  // neste post; o produto continua com o link normal).
+  let linkCanal = null;
+  if (channel_id) {
+    const canal = channelRepository.findById(channel_id);
+    const link = await linkParaCanal(produto, canal);
+    if (link) {
+      linkCanal = { link, sub_id: subIdDoCanal(canal) };
+      produto = { ...produto, url_afiliado: link, url_final: link };
+    }
   }
 
   const promocao = promotion_id
@@ -92,8 +107,14 @@ export async function buildPublication({
     }
   }
 
+  const menorPreco = seloMenorPreco(produto, { reference });
   const { mensagem } = renderPublication({
-    template, product: produtoParaTexto, pricing: precos, promotion: promocao, coupon: precos.cupom,
+    template,
+    product: produtoParaTexto,
+    pricing: precos,
+    promotion: promocao,
+    coupon: precos.cupom,
+    extras: { menor_preco: menorPreco?.selo },
   });
 
   const { bloqueios, avisos } = validatePublication({
@@ -112,6 +133,7 @@ export async function buildPublication({
     avisos,
     ia,
     conferencia_link: conferencia,
+    link_canal: linkCanal,
     pode_publicar: bloqueios.length === 0,
   };
 }
@@ -187,7 +209,9 @@ export async function enqueue({
     throw badRequest(`Produto ja publicado neste canal nos ultimos ${nao_repetir_dias} dias`);
   }
 
-  const post = await buildPublication({ product_id, promotion_id, coupon_id, template_id, usar_ia });
+  const post = await buildPublication({
+    product_id, promotion_id, coupon_id, template_id, usar_ia, channel_id,
+  });
   if (post.bloqueios.length) {
     throw badRequest(`Publicacao bloqueada: ${post.bloqueios.join('; ')}`, { bloqueios: post.bloqueios });
   }
@@ -281,8 +305,8 @@ export async function processQueue({ limite = 10, reference = new Date(), forcar
 
     // Anti-bloqueio: um envio de verdade por vez, com pausa sorteada entre
     // eles. O que nao cabe agora fica na fila para o proximo ciclo.
-    const real = !pub.dry_run && !config.runtime.dryRun;
-    if (real && !forcar && Date.now() < proximoEnvioPermitido) {
+    const comPausa = !pub.dry_run && !config.runtime.dryRun && precisaPausaAntiBloqueio(canal);
+    if (comPausa && !forcar && Date.now() < proximoEnvioPermitido) {
       resultado.adiadas += 1;
       resultado.detalhes.push({ id: pub.id, status: 'adiada', motivo: 'pausa_entre_envios' });
       continue;
@@ -295,7 +319,7 @@ export async function processQueue({ limite = 10, reference = new Date(), forcar
       resultado.detalhes.push({ id: pub.id, status: 'ignorada', motivo: envio.erro });
       continue;
     }
-    if (real) proximoEnvioPermitido = Date.now() + sortearPausaMs();
+    if (comPausa) proximoEnvioPermitido = Date.now() + sortearPausaMs();
     if (envio.ok) resultado.enviadas += 1; else resultado.erros += 1;
     resultado.detalhes.push({ id: pub.id, status: envio.ok ? 'enviada' : 'erro', motivo: envio.erro || null });
   }
@@ -358,8 +382,7 @@ export async function sendPublication(pub, canal = null) {
       envio = { id: `dry_${pub.id}`, provider: 'dry-run', simulado: true };
       log.info(`[DRY RUN] Nao enviado de verdade para ${destino.nome}`, { publicacao: pub.id });
     } else {
-      const provider = getWhatsAppProvider({ session: destino.sessao || undefined });
-      envio = await provider.sendMessage({
+      envio = await mensageiroDo(destino).sendMessage({
         chatId: destino.identificador,
         texto: pub.mensagem,
         imagem: pub.imagem || undefined,

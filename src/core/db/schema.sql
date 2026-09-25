@@ -158,6 +158,7 @@ CREATE TABLE IF NOT EXISTS channels (
   limite_diario     INTEGER DEFAULT 20,
   observacoes       TEXT,
   ultimo_envio      TEXT,
+  sub_id            TEXT,
   criado_em         TEXT NOT NULL,
   atualizado_em     TEXT NOT NULL
 );
@@ -300,4 +301,19 @@ CREATE TABLE IF NOT EXISTS link_checks (
   verificado_em TEXT NOT NULL,
   criado_em     TEXT NOT NULL,
   atualizado_em TEXT NOT NULL
+);
+
+-- Link de afiliado por produto E grupo (Shopee com subId do grupo): o
+-- relatório da loja mostra qual grupo vendeu. `url_origem` invalida o cache
+-- quando o link do produto muda.
+CREATE TABLE IF NOT EXISTS links_canal (
+  id            TEXT PRIMARY KEY,
+  product_id    TEXT NOT NULL,
+  channel_id    TEXT NOT NULL,
+  sub_id        TEXT NOT NULL,
+  url_origem    TEXT NOT NULL,
+  link          TEXT NOT NULL,
+  criado_em     TEXT NOT NULL,
+  atualizado_em TEXT NOT NULL,
+  UNIQUE (product_id, channel_id)
 );

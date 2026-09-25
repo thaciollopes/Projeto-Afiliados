@@ -29,6 +29,15 @@ services:
       - WAHA_DASHBOARD_NO_PASSWORD=True
       - WHATSAPP_SWAGGER_PASSWORD=
       - WHATSAPP_SWAGGER_NO_PASSWORD=True
+      # "Converter no privado": a WAHA avisa o app de cada mensagem recebida,
+      # assinada com a mesma chave do .env (WHATSAPP_WEBHOOK_CHAVE).
+      # Vazio em WAHA_HOOK_URL = desligado.
+      - WHATSAPP_HOOK_URL=${WAHA_HOOK_URL:-}
+      - WHATSAPP_HOOK_EVENTS=message
+      - WHATSAPP_HOOK_HMAC_KEY=${WHATSAPP_WEBHOOK_CHAVE:-}
+    extra_hosts:
+      # host.docker.internal no Linux/VPS (no Windows ja existe).
+      - "host.docker.internal:host-gateway"
     volumes:
       - afiliados-waha-sessions:/app/.sessions
 

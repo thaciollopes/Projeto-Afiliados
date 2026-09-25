@@ -25,9 +25,30 @@ export function getDb() {
 
   const schema = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8');
   db.exec(schema);
+  aplicarColunasNovas(db);
 
   logger.info('db', `Banco pronto (${db.engine})`, { file: config.db.file });
   return db;
+}
+
+/**
+ * Coluna nova em tabela que ja existe. O schema.sql roda com IF NOT EXISTS,
+ * entao banco criado antes da coluna nunca a ganharia sozinho. A coluna
+ * tambem vai no schema.sql (banco novo nasce com ela; aqui vira no-op).
+ * Regra: so ADD COLUMN, nunca renomear/apagar — backup antigo continua abrindo.
+ */
+const COLUNAS_NOVAS = [
+  ['channels', 'sub_id', 'TEXT'],
+];
+
+function aplicarColunasNovas(conn) {
+  for (const [tabela, coluna, tipo] of COLUNAS_NOVAS) {
+    const existentes = conn.prepare(`PRAGMA table_info(${tabela})`).all().map((c) => c.name);
+    if (!existentes.includes(coluna)) {
+      conn.exec(`ALTER TABLE ${tabela} ADD COLUMN ${coluna} ${tipo}`);
+      logger.info('db', `Coluna nova: ${tabela}.${coluna}`);
+    }
+  }
 }
 
 export function closeDb() {

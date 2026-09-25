@@ -107,7 +107,7 @@ function sessaoRecusada(dados) {
   return (dados?.errors || []).some((e) => FRASES_DE_LOGIN.test(String(e?.message || e)));
 }
 
-async function converterLote(urls, sessao) {
+async function converterLote(urls, sessao, subId = null) {
   const headers = {
     accept: 'application/json',
     'content-type': 'application/json',
@@ -126,7 +126,10 @@ async function converterLote(urls, sessao) {
       operationName: 'batchGetCustomLink',
       query: CONSULTA,
       variables: {
-        linkParams: urls.map((originalLink) => ({ originalLink, advancedLinkParams: {} })),
+        linkParams: urls.map((originalLink) => ({
+          originalLink,
+          advancedLinkParams: subId ? { subId1: subId } : {},
+        })),
         sourceCaller: 'CUSTOM_LINK_CALLER',
       },
     }),
@@ -177,7 +180,18 @@ async function converterLote(urls, sessao) {
  * Converte uma lista de links (em lotes de 5).
  * @returns {Promise<{convertidos:number, falhas:number, resultados:Array, affiliate_id:string|null}>}
  */
-export async function converterLinks(urls = []) {
+/**
+ * Sub ID aceito pela Shopee: só letras e números, até 50. É o que aparece no
+ * relatório de comissões para dizer de qual grupo veio a venda.
+ */
+export function normalizarSubId(texto) {
+  return String(texto || '')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^A-Za-z0-9]/g, '')
+    .slice(0, 50) || null;
+}
+
+export async function converterLinks(urls = [], { subId = null } = {}) {
   const porLimpo = new Map();
   for (const url of urls.filter(ehLinkDaShopee)) porLimpo.set(linkLimpo(url), url);
   const alvos = [...porLimpo.keys()];
@@ -187,7 +201,7 @@ export async function converterLinks(urls = []) {
   const resultados = [];
   for (let i = 0; i < alvos.length; i += LOTE) {
     const lote = alvos.slice(i, i + LOTE);
-    const mapa = await converterLote(lote, sessao);
+    const mapa = await converterLote(lote, sessao, normalizarSubId(subId));
     for (const limpo of lote) resultados.push({ url: porLimpo.get(limpo), url_limpa: limpo, ...mapa.get(limpo) });
     if (i + LOTE < alvos.length) await new Promise((r) => setTimeout(r, PAUSA_MS));
   }

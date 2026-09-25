@@ -25,6 +25,7 @@ const campanhas = await import('../src/core/services/campaignService.js');
 const produtos = await import('../src/core/services/productService.js');
 const { TEMPLATES_PADRAO } = await import('../src/core/services/templateService.js');
 const { config } = await import('../src/config/index.js');
+const { seloMenorPreco } = await import('../src/core/services/historicoPrecoService.js');
 
 getDb();
 
@@ -242,6 +243,33 @@ test('publicação presa em "enviando" vira erro com alerta, sem reenviar sozinh
   assert.equal(depois.status, 'erro');
   assert.match(depois.erro, /Confira no grupo/);
   assert.equal(depois.tentativas, publicacoes.MAX_TENTATIVAS, 'não volta para a fila sozinha');
+});
+
+test('selo "menor preço": só com histórico que prove a queda', () => {
+  const agora = new Date('2026-09-25T12:00:00Z');
+  const diasAtras = (d) => new Date(agora.getTime() - d * 86400000).toISOString();
+  const criar = (id, coleta) => repos.productRepository.create({
+    marketplace: 'demo', external_id: id, titulo_original: id, preco_atual: 80, data_coleta: coleta, status: 'ativo',
+  });
+  const historico = (produtoId, de, para, dias) => repos.priceHistoryRepository.create({
+    product_id: produtoId, preco_anterior: de, preco_novo: para, criado_em: diasAtras(dias),
+  });
+
+  const caiu = criar('SELO-1', diasAtras(20));
+  historico(caiu.id, 100, 90, 10);
+  historico(caiu.id, 90, 80, 2);
+  assert.match(seloMenorPreco(caiu, { reference: agora }).selo, /Menor preço que registramos em 30 dias/);
+
+  const novo = criar('SELO-2', diasAtras(3));
+  historico(novo.id, 100, 80, 1);
+  assert.equal(seloMenorPreco(novo, { reference: agora }), null, 'produto de 3 dias não tem histórico para provar nada');
+
+  const subiuDepois = criar('SELO-3', diasAtras(20));
+  historico(subiuDepois.id, 70, 80, 5);
+  assert.equal(seloMenorPreco(subiuDepois, { reference: agora }), null, 'já esteve mais barato: não é o menor');
+
+  const semHistorico = criar('SELO-4', diasAtras(20));
+  assert.equal(seloMenorPreco(semHistorico, { reference: agora }), null, 'preço parado não é queda');
 });
 
 test.after(() => {

@@ -40,6 +40,9 @@ export async function renderStatus() {
     ['Estado', status.whatsapp.status], ['Endereço', status.whatsapp.baseUrl || '—'],
     ['Erro', status.whatsapp.erro || '—'],
   ])}
+          ${status.telegram?.em_uso === false ? '' : bloco('Telegram', status.telegram?.online, [
+    ['Bot', status.telegram?.bot || '—'], ['Erro', status.telegram?.erro || '—'],
+  ])}
           ${bloco('n8n', status.n8n.online, [
     ['Endereço', status.n8n.baseUrl], ['API key', status.n8n.temApiKey ? 'configurada' : 'ausente'],
     ['Workflows', status.n8n.workflows ?? '—'], ['Ativos', status.n8n.ativos ?? '—'],

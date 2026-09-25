@@ -30,10 +30,13 @@ export const VARIAVEIS_DISPONIVEIS = [
   { nome: 'categoria', descricao: 'Categoria do produto' },
   { nome: 'validade', descricao: 'Ate quando vale a promocao/cupom' },
   { nome: 'frete', descricao: 'Texto de frete (ex.: Frete gratis)' },
+  { nome: 'menor_preco', descricao: 'Selo "Menor preco que registramos em 30 dias" (so com historico que prove)' },
 ];
 
 /** Monta o dicionario de variaveis a partir do produto + calculo de preco. */
-export function buildContext({ product = {}, pricing = {}, promotion = null, coupon = null } = {}) {
+export function buildContext({
+  product = {}, pricing = {}, promotion = null, coupon = null, extras = {},
+} = {}) {
   const moeda = pricing.moeda || product.moeda || 'BRL';
   const money = (v) => (v === null || v === undefined ? '' : formatMoney(v, moeda));
   const cupom = pricing.cupom || (pricing.tem_cupom ? coupon : null);
@@ -59,6 +62,7 @@ export function buildContext({ product = {}, pricing = {}, promotion = null, cou
     categoria: product.categoria || '',
     validade: validade ? formatDateTimeBR(validade) : '',
     frete: pricing.frete_gratis ? 'Frete gratis' : '',
+    menor_preco: extras.menor_preco || '',
   };
 }
 
@@ -76,8 +80,10 @@ export function renderTemplate(corpo, context) {
 }
 
 /** Atalho: produto + preco -> mensagem final. */
-export function renderPublication({ template, product, pricing, promotion, coupon }) {
-  const context = buildContext({ product, pricing, promotion, coupon });
+export function renderPublication({
+  template, product, pricing, promotion, coupon, extras,
+}) {
+  const context = buildContext({ product, pricing, promotion, coupon, extras });
   const corpo = template?.corpo || DEFAULT_TEMPLATE_BODY;
   return { mensagem: renderTemplate(corpo, context), context };
 }
@@ -138,6 +144,7 @@ export const DEFAULT_TEMPLATE_BODY = [
   '',
   '💰 De: ~{preco_anterior}~',
   '🔥 Por: {preco_final}',
+  '📉 {menor_preco}',
   '',
   '🏷️ Cupom: *{cupom}*',
   '💸 Desconto do cupom: {desconto_cupom}',
@@ -216,6 +223,7 @@ export const TEMPLATES_PADRAO = [
       '❌ De: ~{preco_anterior}~',
       '✅ Por: *{preco_final}*',
       '💸 Voce economiza {desconto_valor}',
+      '📉 {menor_preco}',
       '',
       '🏷️ Cupom: *{cupom}*',
       '🚚 {frete}',

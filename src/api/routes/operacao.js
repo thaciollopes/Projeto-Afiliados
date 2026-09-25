@@ -3,6 +3,11 @@
  * WhatsApp e n8n.
  */
 import { Router } from 'express';
+import { config } from '../../config/index.js';
+import { logger } from '../../core/utils/logger.js';
+import {
+  criarCanal, atualizarCanal, canaisDisponiveis, testarCanal,
+} from '../../core/services/canalService.js';
 import { asyncHandler, queryOptions } from '../middleware/index.js';
 import { channelRepository, publicationRepository } from '../../core/repositories/index.js';
 import {
@@ -14,6 +19,8 @@ import {
   retryPublication, publicationStats, channelWindowOpen,
 } from '../../core/services/publicationService.js';
 import { getWhatsAppProvider, resetWhatsAppProvider } from '../../integrations/whatsapp/index.js';
+import { assinaturaWebhookValida, lerMensagemDoWebhook } from '../../integrations/whatsapp/wahaProvider.js';
+import { tratarMensagemRecebida } from '../../core/services/conversorPorMensagemService.js';
 import { n8nClient } from '../../integrations/n8n/client.js';
 import { notFound, badRequest } from '../../core/utils/errors.js';
 import { nowIso } from '../../core/utils/dates.js';
@@ -31,35 +38,25 @@ canaisRouter.get('/', asyncHandler(async (req, res) => {
 }));
 
 canaisRouter.post('/', asyncHandler(async (req, res) => {
-  if (!req.body.nome || !req.body.identificador) throw badRequest('nome e identificador sao obrigatorios');
-  res.status(201).json(channelRepository.create({ status: 'ativo', tipo: 'grupo', provider: 'waha', ...req.body }));
+  res.status(201).json(criarCanal(req.body));
 }));
 
 canaisRouter.put('/:id', asyncHandler(async (req, res) => {
-  if (!channelRepository.findById(req.params.id)) throw notFound('Canal');
-  res.json(channelRepository.update(req.params.id, req.body));
+  res.json(atualizarCanal(req.params.id, req.body));
 }));
 
 canaisRouter.delete('/:id', asyncHandler(async (req, res) => {
   res.json({ removido: channelRepository.remove(req.params.id) });
 }));
 
-/** Lista os grupos da sessao do WhatsApp para o usuario escolher. */
+/** Grupos e canais do WhatsApp da sessao, para o usuario escolher. */
 canaisRouter.get('/disponiveis', asyncHandler(async (_req, res) => {
-  const grupos = await getWhatsAppProvider().listGroups();
-  const cadastrados = new Set(channelRepository.list({ limit: 500 }).map((c) => c.identificador));
-  res.json(grupos.map((g) => ({ ...g, ja_cadastrado: cadastrados.has(g.identificador) })));
+  res.json(await canaisDisponiveis());
 }));
 
-/** Envia uma mensagem de teste para o canal. */
+/** Envia uma mensagem de teste para o canal (WhatsApp ou Telegram). */
 canaisRouter.post('/:id/testar', asyncHandler(async (req, res) => {
-  const canal = channelRepository.findById(req.params.id);
-  if (!canal) throw notFound('Canal');
-
-  const texto = req.body.texto || `Teste do ${process.env.APP_NAME || 'sistema de ofertas'} em ${new Date().toLocaleString('pt-BR')}`;
-  const provider = getWhatsAppProvider({ session: canal.sessao || undefined });
-  const envio = await provider.sendMessage({ chatId: canal.identificador, texto });
-  res.json({ enviado: true, ...envio });
+  res.json({ enviado: true, ...(await testarCanal(req.params.id, req.body?.texto)) });
 }));
 
 // -------------------------------------------------------------- campanhas --
@@ -222,6 +219,25 @@ whatsappRouter.post('/sessao/iniciar', asyncHandler(async (_req, res) => {
 whatsappRouter.get('/grupos', asyncHandler(async (_req, res) => {
   res.json(await getWhatsAppProvider().listGroups());
 }));
+
+/**
+ * Webhook da WAHA ("converter no privado"). Responde 200 na hora — a WAHA
+ * reenvia se demorar — e trata a mensagem em segundo plano.
+ */
+whatsappRouter.post('/webhook', (req, res) => {
+  const chave = config.whatsapp.webhookChave;
+  if (!chave) return res.status(403).json({ erro: 'Webhook desligado (WHATSAPP_WEBHOOK_CHAVE vazio)' });
+  if (!assinaturaWebhookValida(req.corpoBruto, req.get('x-webhook-hmac'), chave)) {
+    return res.status(401).json({ erro: 'Assinatura do webhook invalida' });
+  }
+  res.json({ recebido: true });
+
+  const mensagem = lerMensagemDoWebhook(req.body);
+  tratarMensagemRecebida(mensagem).catch((err) => {
+    logger.error('webhook', `Falha ao responder mensagem: ${err.message}`);
+  });
+  return undefined;
+});
 
 // -------------------------------------------------------------------- n8n --
 

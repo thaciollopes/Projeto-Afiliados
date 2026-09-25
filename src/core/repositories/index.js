@@ -94,6 +94,12 @@ export const savedSearchRepository = new BaseRepository({
   defaultSort: 'criado_em DESC',
 });
 
+export const linkCanalRepository = new BaseRepository({
+  table: 'links_canal',
+  prefix: 'lcn',
+  defaultSort: 'criado_em DESC',
+});
+
 export const linkCheckRepository = new BaseRepository({
   table: 'link_checks',
   prefix: 'lck',
