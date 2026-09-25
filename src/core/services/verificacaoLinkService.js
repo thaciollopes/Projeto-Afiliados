@@ -15,7 +15,7 @@
  * loja mudou o formato), o resultado é "não conferido" — nunca "ok" chutado.
  */
 import { linkCheckRepository, productRepository } from '../repositories/index.js';
-import { lojaBase } from './affiliateLinkService.js';
+import { lojaBase, exigeLinkDoPainel } from './affiliateLinkService.js';
 import { tagDaLoja } from './lojaService.js';
 import { tagDeAfiliado as tagDoMercadoLivre } from './mercadoLivreLinkService.js';
 import { nowIso } from '../utils/dates.js';
@@ -201,4 +201,24 @@ export async function verificarProdutosDaLoja(loja, { limite = 30, forcar = fals
   }
   resumo.problemas = resumo.problemas.slice(0, 30);
   return resumo;
+}
+
+const LINK_CURTO_DE_AFILIADO = /meli\.la\/|mercadolivre\.com\/sec\/|s\.shopee\.|shope\.ee|shp\.ee|amzn\.to|s\.click\.aliexpress\./i;
+
+/**
+ * Situação do link de um produto, numa palavra, para a lista de produtos:
+ * ver de longe o que sai com comissão, sem abrir o preview de cada um.
+ * Não vai à rede — usa a última conferência guardada.
+ * @returns {{tipo:'ok'|'erro'|'alerta'|'', texto:string}}
+ */
+export function situacaoDoLink(produto) {
+  const conferencia = conferenciaAtual(produto);
+  if (conferencia?.confere === true) return { tipo: 'ok', texto: 'seu ID confirmado' };
+  if (conferencia?.confere === false) return { tipo: 'erro', texto: 'ID de outra conta' };
+
+  if (exigeLinkDoPainel(produto.marketplace) && !LINK_CURTO_DE_AFILIADO.test(produto.url_final || '')) {
+    return { tipo: 'alerta', texto: 'sem comissão' };
+  }
+  if (produto.url_afiliado) return { tipo: '', texto: 'link de afiliado (não conferido)' };
+  return { tipo: 'alerta', texto: 'sem link de afiliado' };
 }

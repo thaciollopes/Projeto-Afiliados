@@ -69,7 +69,7 @@ com status 400, 401, 404, 409 ou 500.
 **Buscar:**
 ```http
 POST /api/produtos/buscar
-{ "termo": "perfume feminino", "marketplaces": ["demo"],
+{ "termo": "perfume feminino", "marketplaces": ["mercadolivre"],
   "precoMax": 150, "descontoMin": 20, "ordenacao": "vendas", "limite": 20 }
 ```
 

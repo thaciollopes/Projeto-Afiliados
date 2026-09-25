@@ -162,6 +162,7 @@ export function gradeProdutos(produtos, { selecionados, aoMudar, aoEditar, aoRem
             ${produto.categoria ? etiqueta(produto.categoria) : ''}
             ${produto.ja_cadastrado ? etiqueta('já cadastrado', 'ok') : ''}
             ${produto.status && !modoBusca ? statusEtiqueta(produto.status) : ''}
+            ${produto.situacao_link ? etiqueta(`🔗 ${produto.situacao_link.texto}`, produto.situacao_link.tipo) : ''}
           </div>
           <div class="linha" style="margin-top:auto;gap:5px"></div>
         </div>

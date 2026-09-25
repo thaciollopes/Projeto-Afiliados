@@ -33,6 +33,7 @@ export function salvarTagDaLoja(loja, tag) {
   const refazer = loja.id === 'mercadolivre' && (existente?.identificador || null) !== valor
     ? devolverLinksDoMercadoLivre()
     : 0;
+  if (!valor && loja.parametro) tirarTagDosLinks(loja);
   return { ...reaplicarEmTodos(productRepository), links_para_refazer: refazer };
 }
 
@@ -50,4 +51,22 @@ function devolverLinksDoMercadoLivre() {
     productRepository.update(p.id, { url_afiliado: null, url_final: p.url_original });
   }
   return produtos.length;
+}
+
+/**
+ * Tag apagada: o link não pode continuar levando a tag antiga (a comissão
+ * iria para um cadastro que você removeu). Volta para o link cru.
+ */
+function tirarTagDosLinks(loja) {
+  const produtos = productRepository.list({ limit: 5000 })
+    .filter((p) => lojaBase(p.marketplace) === loja.id && p.url_afiliado);
+  for (const p of produtos) {
+    try {
+      const url = new URL(p.url_afiliado);
+      if (!url.searchParams.has(loja.parametro)) continue;
+    } catch {
+      continue;
+    }
+    productRepository.update(p.id, { url_afiliado: null, url_final: p.url_original || null });
+  }
 }

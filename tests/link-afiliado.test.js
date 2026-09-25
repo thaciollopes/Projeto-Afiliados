@@ -185,6 +185,14 @@ test('conferência: rede fora do ar vira "não conferido", não "ok"', async () 
   assert.match(r.motivo, /não consegui abrir/);
 });
 
+test('lista de produtos mostra de longe o que sai com comissão', () => {
+  const { situacaoDoLink } = verificacao;
+  assert.equal(situacaoDoLink({ marketplace: 'mercadolivre', url_final: 'https://produto.mercadolivre.com.br/MLB-1' }).texto, 'sem comissão');
+  assert.equal(situacaoDoLink({ marketplace: 'magalu', url_original: 'https://x' }).texto, 'sem link de afiliado');
+  const outra = repos.productRepository.findOne({ external_id: 'MLB9' });
+  assert.equal(situacaoDoLink(outra).tipo, 'erro', 'o meli.la de outra conta conferido acima');
+});
+
 // --------------------------------- onde o link de afiliado se perdia ---
 
 test('reimportar oferta do ML não troca o meli.la pelo link cru', () => {

@@ -7,6 +7,7 @@ import { config } from '../../config/index.js';
 import {
   productRepository, channelRepository, campaignRepository,
   affiliateRepository, publicationRepository, couponRepository, promotionRepository,
+  linkCheckRepository,
 } from '../repositories/index.js';
 import { getWhatsAppProvider } from '../../integrations/whatsapp/index.js';
 import { listaDeLojas } from '../../integrations/marketplaces/lojas.js';
@@ -19,8 +20,8 @@ export async function firstSteps() {
   const campanhasAtivas = campaignRepository.count({ status: 'ativa' });
   const testesFeitos = publicationRepository.count({ status: 'enviado' });
 
-  // Loja pronta = tem a tag (Amazon/Shopee/Magalu) ou o cookie (Mercado Livre,
-  // que gera o meli.la pela sessão e usa o apelido da conta como tag).
+  // Loja pronta = tem o cookie (Mercado Livre e Shopee geram o link curto pela
+  // sessão) ou a tag (Amazon e Magalu, onde a tag vai no link).
   const comTag = new Set(affiliateRepository.list({ limit: 200 })
     .filter((a) => a.identificador).map((a) => a.marketplace));
   const lojasProntas = listaDeLojas().filter((l) => (l.linkAfiliado === 'cookie'
@@ -31,6 +32,9 @@ export async function firstSteps() {
   try {
     whatsapp = await getWhatsAppProvider().status();
   } catch { /* offline conta como não configurado */ }
+
+  const linksConfirmados = linkCheckRepository.count({ confere: 1 });
+  const linksDeOutraConta = linkCheckRepository.count({ confere: 0 });
 
   const usandoWahaDeVerdade = config.whatsapp.provider === 'waha';
   const whatsappPronto = usandoWahaDeVerdade && Boolean(whatsapp.conectado);
@@ -84,12 +88,26 @@ export async function firstSteps() {
     {
       id: 'produtos',
       titulo: 'Colocar produtos de verdade',
-      explicacao: 'Busque na Amazon, capture pela extensão, cadastre na mão ou importe planilha.',
+      explicacao: 'Busque no Mercado Livre ou na Amazon, capture pela extensão (Shopee, Magalu), cadastre na mão ou importe planilha.',
       feito: produtos > 0,
       obrigatorio: true,
       rota: '#/buscar',
       acao: 'Procurar produtos',
       detalhe: produtos ? `${produtos} produto(s) na base.` : 'Nenhum produto ainda.',
+    },
+    {
+      id: 'conferir_links',
+      titulo: 'Conferir se o ID de afiliado chega na loja',
+      explicacao: 'O sistema abre os links e lê o ID que a loja recebe. Link de outra conta fica bloqueado na fila.',
+      feito: linksConfirmados > 0 && linksDeOutraConta === 0,
+      obrigatorio: false,
+      rota: '#/lojas',
+      acao: 'Conferir em LOJAS',
+      detalhe: linksDeOutraConta
+        ? `${linksDeOutraConta} link(s) com ID de OUTRA conta — confira o cookie e a tag.`
+        : linksConfirmados
+          ? `${linksConfirmados} link(s) com o seu ID confirmado.`
+          : 'Nenhum link conferido ainda (a fila confere sozinha antes de publicar).',
     },
     {
       id: 'promocoes',

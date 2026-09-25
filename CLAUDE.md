@@ -47,7 +47,7 @@ Nada em `core/` conhece "WAHA" ou "AliExpress" pelo nome.
 ```bash
 npm start              # sobe (ou INICIAR.bat)
 npm run dev            # com --watch
-npm test               # 95 testes; o painel entra junto se o servidor estiver no ar
+npm test               # 100 testes; o painel entra junto se o servidor estiver no ar
 npm run seed           # só categorias e templates (idempotente)
 npm run health         # diagnóstico
 node scripts/reset.js --sim   # zera o banco (faz backup antes)
@@ -121,6 +121,8 @@ dinâmicos. Copie o padrão se precisar de outro teste com banco.
 | Shopee | link de afiliado = `s.shopee.com.br` via cookie do painel (`shopeeLinkService.js`); a conta é a do cookie, o ID em LOJAS só confere |
 | "Link curto = comissão" | falso: `verificacaoLinkService.js` abre o link e lê o ID no destino; ID de outra conta bloqueia a fila |
 | Reimportar produto | não pode trocar o link de afiliado gerado pelo link cru (`importProducts` preserva) |
+| Worker + n8n na mesma fila | `sendPublication` reserva a publicação (lê e marca `enviando` sem `await` no meio); não troque por algo com `await` antes do `update` |
+| Envio real em rajada | `processQueue` manda 1 envio real por vez com pausa sorteada (`ENVIO_PAUSA_MIN/MAX_SEGUNDOS`); o resto fica para o próximo ciclo |
 | Lojas | **sem API e sem loja demo** (pedido do dono). Catálogo em `marketplaces/lojas.js`; tag + cookie na tela LOJAS. Código antigo em `_arquivo/` |
 
 ---

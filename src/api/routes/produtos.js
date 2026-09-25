@@ -12,6 +12,7 @@ import { generate } from '../../integrations/ai/index.js';
 import { converterImportados } from '../../core/services/linkPorCookieService.js';
 import { listMarketplaces } from '../../integrations/marketplaces/index.js';
 import { lerProgresso } from '../../core/services/progressoBuscaService.js';
+import { situacaoDoLink } from '../../core/services/verificacaoLinkService.js';
 
 export const produtosRouter = Router();
 
@@ -27,7 +28,8 @@ produtosRouter.get('/', asyncHandler(async (req, res) => {
   if (req.query.desconto_min) filtros.desconto_percentual = { gte: Number(req.query.desconto_min) };
   if (req.query.avaliacao_min) filtros.avaliacao = { gte: Number(req.query.avaliacao_min) };
 
-  res.json(listProducts(queryOptions(req, filtros)));
+  const pagina = listProducts(queryOptions(req, filtros));
+  res.json({ ...pagina, rows: pagina.rows.map((p) => ({ ...p, situacao_link: situacaoDoLink(p) })) });
 }));
 
 produtosRouter.get('/estatisticas', asyncHandler(async (_req, res) => {

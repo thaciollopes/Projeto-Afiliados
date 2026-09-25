@@ -244,6 +244,7 @@ export function channelWindowOpen(canal, reference = new Date()) {
  */
 export async function processQueue({ limite = 10, reference = new Date(), forcar = false } = {}) {
   const agora = reference.toISOString();
+  liberarEnviosTravados();
 
   const candidatas = publicationRepository.list({
     filters: { status: ['aguardando', 'erro'] },
@@ -278,8 +279,23 @@ export async function processQueue({ limite = 10, reference = new Date(), forcar
       }
     }
 
+    // Anti-bloqueio: um envio de verdade por vez, com pausa sorteada entre
+    // eles. O que nao cabe agora fica na fila para o proximo ciclo.
+    const real = !pub.dry_run && !config.runtime.dryRun;
+    if (real && !forcar && Date.now() < proximoEnvioPermitido) {
+      resultado.adiadas += 1;
+      resultado.detalhes.push({ id: pub.id, status: 'adiada', motivo: 'pausa_entre_envios' });
+      continue;
+    }
+
     resultado.processadas += 1;
     const envio = await sendPublication(pub, canal);
+    if (envio.ignorada) {
+      resultado.processadas -= 1;
+      resultado.detalhes.push({ id: pub.id, status: 'ignorada', motivo: envio.erro });
+      continue;
+    }
+    if (real) proximoEnvioPermitido = Date.now() + sortearPausaMs();
     if (envio.ok) resultado.enviadas += 1; else resultado.erros += 1;
     resultado.detalhes.push({ id: pub.id, status: envio.ok ? 'enviada' : 'erro', motivo: envio.erro || null });
   }
@@ -290,11 +306,48 @@ export async function processQueue({ limite = 10, reference = new Date(), forcar
   return resultado;
 }
 
+let proximoEnvioPermitido = 0;
+
+/** Pausa aleatoria entre dois envios reais (ENVIO_PAUSA_MIN/MAX_SEGUNDOS). */
+export function sortearPausaMs() {
+  const min = Math.max(0, Number(config.envio.pausaMinSegundos) || 0);
+  const max = Math.max(min, Number(config.envio.pausaMaxSegundos) || 0);
+  return Math.round((min + Math.random() * (max - min)) * 1000);
+}
+
+/** Para testes e para quem precisa zerar o espacamento (ex.: reinicio manual). */
+export function zerarPausaEntreEnvios() {
+  proximoEnvioPermitido = 0;
+}
+
+/**
+ * Publicacao presa em "enviando" (o app caiu no meio do envio) vira erro
+ * DEFINITIVO com alerta: a mensagem pode ter saido, entao reenviar sozinho
+ * arriscaria post duplicado no grupo.
+ */
+function liberarEnviosTravados() {
+  const limite = new Date(Date.now() - 10 * 60000).toISOString();
+  const travadas = publicationRepository.list({
+    filters: { status: 'enviando', atualizado_em: { lt: limite } },
+    limit: 100,
+  });
+  for (const pub of travadas) {
+    marcarErro(pub, 'Envio interrompido (o app parou no meio). Confira no grupo se saiu antes de reenviar.', true);
+  }
+}
+
 /** Envia de fato (ou simula, se dry run). Atualiza status, produto e canal. */
 export async function sendPublication(pub, canal = null) {
   const destino = canal || channelRepository.findById(pub.channel_id);
   if (!destino) return { ok: false, erro: 'Canal nao encontrado' };
 
+  // Reserva antes de enviar: worker, n8n e o botao "enviar" podem pegar a
+  // mesma publicacao. Ler e marcar sem await no meio e atomico no Node —
+  // quem chega depois ve "enviando" e desiste, em vez de postar duplicado.
+  const atual = publicationRepository.findById(pub.id);
+  if (!atual || !['aguardando', 'erro'].includes(atual.status)) {
+    return { ok: false, ignorada: true, erro: `Publicacao ja esta "${atual?.status || 'removida'}"` };
+  }
   publicationRepository.update(pub.id, { status: 'enviando' });
 
   const simular = Boolean(pub.dry_run) || config.runtime.dryRun;
@@ -359,7 +412,8 @@ function marcarErro(pub, mensagem, definitivo) {
   publicationRepository.update(pub.id, {
     status: 'erro',
     erro: String(mensagem).slice(0, 500),
-    tentativas,
+    // Definitivo tem que parar de vez: a fila so desiste com tentativas no teto.
+    tentativas: definitivo ? Math.max(tentativas, MAX_TENTATIVAS) : tentativas,
     proxima_tentativa: definitivo ? null : addMinutes(new Date(), espera).toISOString(),
   });
 

@@ -24,6 +24,7 @@ const publicacoes = await import('../src/core/services/publicationService.js');
 const campanhas = await import('../src/core/services/campaignService.js');
 const produtos = await import('../src/core/services/productService.js');
 const { TEMPLATES_PADRAO } = await import('../src/core/services/templateService.js');
+const { config } = await import('../src/config/index.js');
 
 getDb();
 
@@ -161,6 +162,86 @@ test('estatísticas refletem o que aconteceu', () => {
   const stats = publicacoes.publicationStats();
   assert.ok(stats.enviadas >= 1);
   assert.ok(stats.total >= 2);
+});
+
+/** Cancela o que sobrou na fila dos testes anteriores: cada teste abaixo começa limpo. */
+function limparFila() {
+  for (const pub of repos.publicationRepository.list({ filters: { status: ['aguardando', 'erro', 'enviando'] }, limit: 500 })) {
+    repos.publicationRepository.update(pub.id, { status: 'cancelado' });
+  }
+}
+
+function pubNaFila(extra = {}) {
+  return repos.publicationRepository.create({
+    channel_id: canal.id, product_id: produto.id, mensagem: 'Oferta de teste com link',
+    status: 'aguardando', tentativas: 0, dry_run: true, agendado_para: new Date(Date.now() - 1000).toISOString(),
+    ...extra,
+  });
+}
+
+test('worker e n8n processando juntos não postam duplicado', async () => {
+  limparFila();
+  const pub = pubNaFila();
+
+  const [a, b] = await Promise.all([
+    publicacoes.processQueue({ limite: 5 }),
+    publicacoes.processQueue({ limite: 5 }),
+  ]);
+  assert.equal(a.enviadas + b.enviadas, 1, 'a mesma publicação sai uma vez só');
+  assert.equal(repos.publicationRepository.findById(pub.id).status, 'enviado');
+});
+
+test('botão "enviar" em publicação já enviada não manda de novo', async () => {
+  limparFila();
+  const pub = pubNaFila({ status: 'enviado' });
+  const r = await publicacoes.sendPublication(pub);
+  assert.equal(r.ok, false);
+  assert.equal(r.ignorada, true);
+});
+
+test('envio de verdade: pausa sorteada entre um post e outro (anti-bloqueio)', async () => {
+  limparFila();
+  const dryRunOriginal = config.runtime.dryRun;
+  const pausaOriginal = { ...config.envio };
+  config.runtime.dryRun = false;
+  config.envio.pausaMinSegundos = 60;
+  config.envio.pausaMaxSegundos = 60;
+  publicacoes.zerarPausaEntreEnvios();
+  try {
+    const outroCanal = repos.channelRepository.create({
+      nome: 'Grupo 2', identificador: '222@g.us', status: 'ativo',
+      hora_inicio: '00:00', hora_fim: '23:59', intervalo_minutos: 1, limite_diario: 100,
+    });
+    pubNaFila({ dry_run: false });
+    pubNaFila({ dry_run: false, channel_id: outroCanal.id });
+
+    const r = await publicacoes.processQueue({ limite: 10 });
+    assert.equal(r.enviadas, 1, 'só um envio real por vez');
+    assert.ok(r.detalhes.some((d) => d.motivo === 'pausa_entre_envios'));
+
+    const pausa = publicacoes.sortearPausaMs();
+    assert.equal(pausa, 60000);
+  } finally {
+    config.runtime.dryRun = dryRunOriginal;
+    Object.assign(config.envio, pausaOriginal);
+    publicacoes.zerarPausaEntreEnvios();
+    limparFila();
+  }
+});
+
+test('publicação presa em "enviando" vira erro com alerta, sem reenviar sozinha', async () => {
+  limparFila();
+  const presa = pubNaFila({ status: 'enviando' });
+  // atualizado_em é gravado pelo repositório; envelhece direto no banco.
+  getDb().prepare('UPDATE publications SET atualizado_em = ? WHERE id = ?')
+    .run(new Date(Date.now() - 3600000).toISOString(), presa.id);
+
+  const r = await publicacoes.processQueue({ limite: 5 });
+  assert.equal(r.enviadas, 0);
+  const depois = repos.publicationRepository.findById(presa.id);
+  assert.equal(depois.status, 'erro');
+  assert.match(depois.erro, /Confira no grupo/);
+  assert.equal(depois.tentativas, publicacoes.MAX_TENTATIVAS, 'não volta para a fila sozinha');
 });
 
 test.after(() => {
