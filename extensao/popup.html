@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<style>
+  body { width: 320px; margin: 0; font-family: "Segoe UI", system-ui, Arial, sans-serif;
+         font-size: 13px; color: #1c2030; background: #f4f5f9; }
+  header { background: #6b4de6; color: #fff; padding: 12px 14px; }
+  header strong { display: block; font-size: 14px; }
+  header small { opacity: .85; font-size: 11px; }
+  main { padding: 14px; }
+  .caixa { background: #fff; border: 1px solid #e3e6ef; border-radius: 10px; padding: 12px; margin-bottom: 10px; }
+  .caixa b { font-size: 12px; }
+  button { width: 100%; padding: 10px; border: none; border-radius: 9px; background: #6b4de6;
+           color: #fff; font-size: 14px; font-weight: 600; cursor: pointer; }
+  button:disabled { opacity: .55; cursor: not-allowed; }
+  button.secundario { background: #fff; color: #1c2030; border: 1px solid #e3e6ef; margin-top: 8px; font-weight: 400; }
+  #resultado { font-size: 12px; line-height: 1.5; margin-top: 10px; }
+  .ok { color: #10925f; } .erro { color: #c73b46; } .fraco { color: #6b7186; }
+  input { width: 100%; padding: 7px 9px; border: 1px solid #e3e6ef; border-radius: 7px; font-size: 12px; }
+  label { font-size: 11px; color: #6b7186; display: block; margin-bottom: 3px; }
+</style>
+</head>
+<body>
+  <header>
+    <strong>Capturar Ofertas</strong>
+    <small>Plataforma de Afiliados</small>
+  </header>
+  <main>
+    <div class="caixa">
+      <b id="pagina" class="fraco">Lendo a página…</b>
+      <div id="contagem" class="fraco" style="margin-top:4px"></div>
+    </div>
+
+    <div class="caixa" id="card-conectar">
+      <b>🔗 Conectar esta loja</b>
+      <div class="fraco" style="margin:4px 0 8px;font-size:11px">
+        Exporta a sua sessão e a sua etiqueta para o painel. Faça uma vez, estando logado na loja.
+      </div>
+      <button id="conectar" class="secundario" style="margin:0">Conectar loja ao painel</button>
+      <div id="status-conexao" class="fraco" style="margin-top:6px;font-size:11px"></div>
+    </div>
+
+    <button id="capturar" disabled>Capturar ofertas desta página</button>
+    <button id="ver" class="secundario">Só olhar, sem cadastrar</button>
+
+    <div id="resultado"></div>
+
+    <div class="caixa" style="margin-top:12px">
+      <label>Endereço do painel</label>
+      <input id="api" value="http://localhost:3010">
+    </div>
+  </main>
+  <script type="module" src="popup.js"></script>
+</body>
+</html>

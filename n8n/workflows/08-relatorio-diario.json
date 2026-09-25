@@ -1,0 +1,84 @@
+{
+  "name": "AFILIADOS 08 - Relatorio diario",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 20 * * *"
+            }
+          ]
+        }
+      },
+      "id": "b0000081-0000-4000-8000-000000000081",
+      "name": "Todo dia 20:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -200,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.AFILIADOS_API || 'http://host.docker.internal:3010' }}/api/sistema/dashboard",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "b0000082-0000-4000-8000-000000000082",
+      "name": "Dashboard",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        60,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\nconst texto = [\n  '*Resumo do dia - Ofertas*',\n  '',\n  `Publicado hoje: ${d.publicacoes.enviadas_hoje}`,\n  `Na fila: ${d.publicacoes.na_fila}`,\n  `Erros: ${d.publicacoes.erros_hoje}`,\n  `Produtos ativos: ${d.produtos.ativos}`,\n  `Promocoes ativas: ${d.promocoes.ativas}`,\n  `Cupons ativos: ${d.cupons.ativos}`,\n  `Campanhas ativas: ${d.campanhas.ativas}`,\n].join('\n');\n// Pluge aqui o envio (Telegram/WhatsApp/e-mail).\nreturn [{ json: { texto } }];"
+      },
+      "id": "b0000083-0000-4000-8000-000000000083",
+      "name": "Montar texto",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        300,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "Todo dia 20:00": {
+      "main": [
+        [
+          {
+            "node": "Dashboard",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Dashboard": {
+      "main": [
+        [
+          {
+            "node": "Montar texto",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "active": false,
+  "tags": []
+}

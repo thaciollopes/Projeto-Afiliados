@@ -1,0 +1,25 @@
+# =============================================================================
+# Navegador headless DESTE projeto (porta 3004).
+#
+# Usado só pelo coletor por navegação (scraping), quando a loja nao oferece API.
+# Container proprio de proposito: o ranch-browserless (projeto Ranch Life) fica
+# intocado, na rede dele, sem porta publicada.
+#
+#   Subir: docker compose -f docker-compose.browserless.yml up -d
+#   Parar: docker compose -f docker-compose.browserless.yml down
+# =============================================================================
+
+services:
+  afiliados-browserless:
+    image: ghcr.io/browserless/chromium:latest
+    container_name: afiliados-browserless
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3004:3000"
+    environment:
+      - TOKEN=${BROWSERLESS_TOKEN:-afiliados-local}
+      - TIMEOUT=60000
+      - CONCURRENT=2
+      - QUEUED=5
+      - TZ=America/Sao_Paulo
+    shm_size: 1gb

@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Plataforma de Afiliados</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛍️</text></svg>">
+<link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+<div id="app">
+  <aside class="sidebar" id="sidebar">
+    <div class="brand">
+      <span class="brand-icon">🛍️</span>
+      <div>
+        <strong>Afiliados</strong>
+        <small id="brand-modo">carregando…</small>
+      </div>
+    </div>
+    <nav id="menu"></nav>
+    <div class="sidebar-foot">
+      <button class="btn-ghost" id="btn-tema" title="Alternar tema">🌓 Tema</button>
+      <span id="versao"></span>
+    </div>
+  </aside>
+
+  <main class="conteudo">
+    <header class="topo">
+      <button class="btn-ghost so-mobile" id="btn-menu" aria-label="Menu">☰</button>
+      <h1 id="titulo-pagina">Dashboard</h1>
+      <div class="topo-acoes">
+        <span class="chip" id="chip-dry" hidden>MODO SIMULAÇÃO</span>
+        <button class="btn-ghost" id="btn-alertas" title="Alertas">🔔 <span id="badge-alertas" class="badge" hidden>0</span></button>
+        <button class="btn-ghost" id="btn-atualizar" title="Recarregar">⟳</button>
+      </div>
+    </header>
+    <div id="pagina" class="pagina"></div>
+  </main>
+</div>
+
+<div id="modal-fundo" class="modal-fundo" hidden>
+  <div class="modal" role="dialog" aria-modal="true">
+    <header><h2 id="modal-titulo"></h2><button class="btn-ghost" id="modal-fechar">✕</button></header>
+    <div id="modal-corpo"></div>
+    <footer id="modal-acoes"></footer>
+  </div>
+</div>
+
+<div id="avisos" class="avisos"></div>
+
+<script type="module" src="/js/app.js"></script>
+</body>
+</html>

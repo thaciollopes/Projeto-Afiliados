@@ -1,0 +1,63 @@
+{
+  "name": "AFILIADOS 05 - Limpeza semanal",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 4 * * 0"
+            }
+          ]
+        }
+      },
+      "id": "b0000051-0000-4000-8000-000000000051",
+      "name": "Domingo 04:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -200,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.AFILIADOS_API || 'http://host.docker.internal:3010' }}/api/sistema/limpeza/executar",
+        "options": {
+          "timeout": 120000
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"dry\":false}"
+      },
+      "id": "b0000052-0000-4000-8000-000000000052",
+      "name": "Executar limpeza",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        60,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "Domingo 04:00": {
+      "main": [
+        [
+          {
+            "node": "Executar limpeza",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "active": false,
+  "tags": []
+}

@@ -1,0 +1,63 @@
+{
+  "name": "AFILIADOS 04 - Backup diario",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "30 3 * * *"
+            }
+          ]
+        }
+      },
+      "id": "b0000041-0000-4000-8000-000000000041",
+      "name": "Todo dia 03:30",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -200,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.AFILIADOS_API || 'http://host.docker.internal:3010' }}/api/sistema/backups",
+        "options": {
+          "timeout": 120000
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"rotulo\":\"n8n\"}"
+      },
+      "id": "b0000042-0000-4000-8000-000000000042",
+      "name": "Gerar backup",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        60,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "Todo dia 03:30": {
+      "main": [
+        [
+          {
+            "node": "Gerar backup",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "active": false,
+  "tags": []
+}

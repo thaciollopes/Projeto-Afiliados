@@ -1,0 +1,87 @@
+{
+  "name": "AFILIADOS 02 - Executar campanhas ativas",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 10
+            }
+          ]
+        }
+      },
+      "id": "b0000021-0000-4000-8000-000000000021",
+      "name": "A cada 10 minutos",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -200,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.AFILIADOS_API || 'http://host.docker.internal:3010' }}/api/campanhas/executar-ativas",
+        "options": {
+          "timeout": 120000
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={}"
+      },
+      "id": "b0000022-0000-4000-8000-000000000022",
+      "name": "Executar campanhas",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        60,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const r = $input.first().json.resultados || [];\nconst total = r.reduce((s, c) => s + (c.enfileiradas || 0), 0);\nreturn [{ json: { campanhas: r.length, enfileiradas: total, detalhe: r } }];"
+      },
+      "id": "b0000023-0000-4000-8000-000000000023",
+      "name": "Resumo",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        300,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "A cada 10 minutos": {
+      "main": [
+        [
+          {
+            "node": "Executar campanhas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Executar campanhas": {
+      "main": [
+        [
+          {
+            "node": "Resumo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "active": false,
+  "tags": []
+}

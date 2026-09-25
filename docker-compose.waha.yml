@@ -1,0 +1,36 @@
+# =============================================================================
+# WAHA DESTE PROJETO (afiliados) - porta 3003
+#
+# Proposito: numero/sessao SO para divulgacao de ofertas, separado das WAHA
+# dos outros projetos (crm-waha: 3001, ranch-waha: 3002). Nao declare aqueles
+# containers aqui: dois composes cuidando do mesmo container destroem a sessao.
+#
+#   Subir:  docker compose -f docker-compose.waha.yml up -d
+#   Parar:  docker compose -f docker-compose.waha.yml down
+#   Painel: http://localhost:3003
+#
+# Seguranca desligada porque so escuta em 127.0.0.1 (seu PC). Na VPS,
+# preencha WAHA_API_KEY e nao publique a porta na internet.
+# =============================================================================
+
+services:
+  afiliados-waha:
+    image: devlikeapro/waha:latest
+    container_name: afiliados-waha
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3003:3000"
+    environment:
+      - WHATSAPP_DEFAULT_ENGINE=${WAHA_ENGINE:-NOWEB}
+      - TZ=America/Sao_Paulo
+      - WAHA_API_KEY=
+      - WAHA_NO_API_KEY=True
+      - WAHA_DASHBOARD_PASSWORD=
+      - WAHA_DASHBOARD_NO_PASSWORD=True
+      - WHATSAPP_SWAGGER_PASSWORD=
+      - WHATSAPP_SWAGGER_NO_PASSWORD=True
+    volumes:
+      - afiliados-waha-sessions:/app/.sessions
+
+volumes:
+  afiliados-waha-sessions:

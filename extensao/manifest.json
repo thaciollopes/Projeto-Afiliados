@@ -1,0 +1,20 @@
+{
+  "manifest_version": 3,
+  "name": "Capturar Ofertas - Plataforma de Afiliados",
+  "version": "1.0.0",
+  "description": "Captura os produtos da pagina que voce esta vendo e manda para a sua Plataforma de Afiliados.",
+  "permissions": ["activeTab", "scripting", "storage", "cookies"],
+  "host_permissions": [
+    "http://localhost:3010/*",
+    "https://*.mercadolivre.com.br/*",
+    "https://*.shopee.com.br/*",
+    "https://*.amazon.com.br/*",
+    "https://*.magazineluiza.com.br/*",
+    "https://*.aliexpress.com/*"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Capturar ofertas desta pagina"
+  },
+  "icons": { "128": "icones/icone.png" }
+}

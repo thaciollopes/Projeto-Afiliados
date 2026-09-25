@@ -1,0 +1,78 @@
+# =============================================================================
+# Stack completa da Plataforma de Afiliados — pensada para a VPS.
+#
+#   docker compose up -d           sobe app + WAHA (+ n8n, se ativar o perfil)
+#   docker compose logs -f app     acompanha o painel
+#   docker compose down            derruba tudo (os volumes ficam)
+#
+# NO SEU PC hoje: você NÃO precisa disto. Use os .bat — o app roda direto no
+# Node e o n8n é o que já está no ar (projeto Projeton8n, porta 5678).
+#
+# O n8n aqui está sob o perfil "n8n" justamente para não subir um segundo n8n
+# sem querer na sua máquina:
+#   docker compose --profile n8n up -d     (na VPS, onde não existe outro)
+# =============================================================================
+
+services:
+  app:
+    build: .
+    image: afiliados-app:latest
+    container_name: afiliados-app
+    restart: unless-stopped
+    ports:
+      - "3010:3010"
+    env_file:
+      - .env
+    environment:
+      - NODE_ENV=production
+      - APP_HOST=0.0.0.0
+      - DB_FILE=/app/data/afiliados.db
+      # Dentro da rede do compose os serviços se acham pelo nome:
+      - WAHA_BASE_URL=http://waha:3000
+      - N8N_BASE_URL=http://n8n:5678
+      - N8N_WEBHOOK_PREFIX=http://n8n:5678/webhook
+    volumes:
+      - afiliados-data:/app/data
+      - afiliados-storage:/app/storage
+    depends_on:
+      - waha
+
+  waha:
+    image: devlikeapro/waha:latest
+    container_name: afiliados-waha-vps
+    restart: unless-stopped
+    ports:
+      # Só localhost: quem fala com a WAHA é o app, pela rede interna.
+      - "127.0.0.1:3003:3000"
+    environment:
+      - WHATSAPP_DEFAULT_ENGINE=${WAHA_ENGINE:-NOWEB}
+      - TZ=America/Sao_Paulo
+      # Na VPS, defina uma chave de verdade no .env e repita em WAHA_API_KEY do app.
+      - WAHA_API_KEY=${WAHA_API_KEY:-}
+      - WAHA_DASHBOARD_USERNAME=${WAHA_DASHBOARD_USERNAME:-admin}
+      - WAHA_DASHBOARD_PASSWORD=${WAHA_DASHBOARD_PASSWORD:-troque-esta-senha}
+    volumes:
+      - afiliados-waha:/app/.sessions
+
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: afiliados-n8n
+    restart: unless-stopped
+    profiles: ["n8n"]
+    ports:
+      - "5678:5678"
+    environment:
+      - GENERIC_TIMEZONE=America/Sao_Paulo
+      - TZ=America/Sao_Paulo
+      - N8N_SECURE_COOKIE=false
+      - N8N_BLOCK_ENV_ACCESS_IN_NODE=false
+      # A API do painel, vista de dentro da rede do compose:
+      - AFILIADOS_API=http://app:3010
+    volumes:
+      - afiliados-n8n:/home/node/.n8n
+
+volumes:
+  afiliados-data:
+  afiliados-storage:
+  afiliados-waha:
+  afiliados-n8n:

@@ -1,0 +1,114 @@
+{
+  "name": "AFILIADOS 07 - Coletar produtos",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "afiliados-coletar",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "b0000071-0000-4000-8000-000000000071",
+      "name": "Webhook coletar",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -220,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Corpo esperado: { termo, marketplace, limite, categoria, precoMax, descontoMin }\nconst b = $input.first().json.body || {};\nreturn [{ json: {\n  termo: b.termo || 'perfume feminino',\n  marketplaces: [b.marketplace || 'demo'],\n  categoria: b.categoria,\n  precoMax: b.precoMax,\n  descontoMin: b.descontoMin,\n  ordenacao: b.ordenacao || 'vendas',\n  limite: b.limite || 20,\n} }];"
+      },
+      "id": "b0000072-0000-4000-8000-000000000072",
+      "name": "Montar filtros",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        20,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.AFILIADOS_API || 'http://host.docker.internal:3010' }}/api/produtos/buscar",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "b0000073-0000-4000-8000-000000000073",
+      "name": "Buscar no marketplace",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        260,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.AFILIADOS_API || 'http://host.docker.internal:3010' }}/api/produtos/importar",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ produtos: $json.produtos, origem: \"n8n\" }) }}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "b0000074-0000-4000-8000-000000000074",
+      "name": "Importar para a base",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        500,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook coletar": {
+      "main": [
+        [
+          {
+            "node": "Montar filtros",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Montar filtros": {
+      "main": [
+        [
+          {
+            "node": "Buscar no marketplace",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar no marketplace": {
+      "main": [
+        [
+          {
+            "node": "Importar para a base",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "active": false,
+  "tags": []
+}

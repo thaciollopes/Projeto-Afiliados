@@ -1,0 +1,84 @@
+{
+  "name": "AFILIADOS 06 - Health check",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 15
+            }
+          ]
+        }
+      },
+      "id": "b0000061-0000-4000-8000-000000000061",
+      "name": "A cada 15 minutos",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -200,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.AFILIADOS_API || 'http://host.docker.internal:3010' }}/api/sistema/status",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "b0000062-0000-4000-8000-000000000062",
+      "name": "Consultar status",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        60,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const s = $input.first().json;\nconst problemas = [];\nif (!s.banco?.online) problemas.push('banco offline');\nif (!s.whatsapp?.online) problemas.push('whatsapp offline: ' + (s.whatsapp?.erro || ''));\nif (!s.n8n?.online) problemas.push('n8n nao respondeu');\n// Sem problema = nada segue adiante (evita aviso a toa).\nif (!problemas.length) return [];\nreturn [{ json: { problemas, em: s.gerado_em } }];"
+      },
+      "id": "b0000063-0000-4000-8000-000000000063",
+      "name": "Checar servicos",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        300,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "A cada 15 minutos": {
+      "main": [
+        [
+          {
+            "node": "Consultar status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Consultar status": {
+      "main": [
+        [
+          {
+            "node": "Checar servicos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "active": false,
+  "tags": []
+}
