@@ -90,11 +90,13 @@ Na VPS com o `docker-compose.yml` deste projeto, o valor certo é `http://app:30
 ```bash
 curl -X POST http://localhost:5678/webhook/afiliados-coletar \
   -H "Content-Type: application/json" \
-  -d '{"termo":"perfume feminino","marketplace":"demo","limite":20,"ordenacao":"vendas"}'
+  -d '{"termo":"perfume feminino","marketplace":"mercadolivre","limite":20,"ordenacao":"vendas"}'
 ```
 
-Campos aceitos: `termo`, `marketplace`, `categoria`, `precoMax`, `descontoMin`,
-`ordenacao`, `limite`. O fluxo busca e já importa para a base.
+Campos aceitos: `termo`, `marketplace` (`mercadolivre` ou `amazon` — as lojas que o
+sistema consegue buscar sozinho), `categoria_loja` (categoria das ofertas do ML, ex.:
+`MLB1246`), `precoMax`, `descontoMin`, `ordenacao`, `limite`. O fluxo busca e já importa
+para a base; produto do ML/Shopee sai da importação com o link de afiliado gerado.
 
 ---
 

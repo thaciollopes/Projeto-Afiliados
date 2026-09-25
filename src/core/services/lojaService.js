@@ -30,5 +30,43 @@ export function salvarTagDaLoja(loja, tag) {
   if (existente) affiliateRepository.update(existente.id, dados);
   else affiliateRepository.create(dados);
 
-  return reaplicarEmTodos(productRepository);
+  const refazer = loja.id === 'mercadolivre' && (existente?.identificador || null) !== valor
+    ? devolverLinksDoMercadoLivre()
+    : 0;
+  if (!valor && loja.parametro) tirarTagDosLinks(loja);
+  return { ...reaplicarEmTodos(productRepository), links_para_refazer: refazer };
+}
+
+/**
+ * O meli.la carrega a tag de quando foi gerado. Trocou a tag, os links antigos
+ * continuam pagando a tag velha — então eles voltam para o link cru e são
+ * gerados de novo (na próxima publicação ou em "Converter todos").
+ * Na Shopee não precisa: quem define a conta é o cookie, não a tag.
+ */
+function devolverLinksDoMercadoLivre() {
+  const produtos = productRepository
+    .list({ filters: { marketplace: ['mercadolivre', 'mercadolivre-web', 'mercadolivre-cookie'] }, limit: 5000 })
+    .filter((p) => /meli\.la\//i.test(p.url_afiliado || '') && p.url_original);
+  for (const p of produtos) {
+    productRepository.update(p.id, { url_afiliado: null, url_final: p.url_original });
+  }
+  return produtos.length;
+}
+
+/**
+ * Tag apagada: o link não pode continuar levando a tag antiga (a comissão
+ * iria para um cadastro que você removeu). Volta para o link cru.
+ */
+function tirarTagDosLinks(loja) {
+  const produtos = productRepository.list({ limit: 5000 })
+    .filter((p) => lojaBase(p.marketplace) === loja.id && p.url_afiliado);
+  for (const p of produtos) {
+    try {
+      const url = new URL(p.url_afiliado);
+      if (!url.searchParams.has(loja.parametro)) continue;
+    } catch {
+      continue;
+    }
+    productRepository.update(p.id, { url_afiliado: null, url_final: p.url_original || null });
+  }
 }

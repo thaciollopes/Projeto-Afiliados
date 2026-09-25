@@ -46,6 +46,8 @@ test('salvar de novo troca a tag, sem criar um segundo cadastro', () => {
 test('tag vazia apaga a tag', () => {
   salvarTagDaLoja(LOJAS.amazon, '   ');
   assert.equal(tagDaLoja('amazon'), null);
+  const produto = repos.productRepository.findOne({ external_id: 'B07SSMCZ7Z' });
+  assert.equal(produto.url_final, 'https://www.amazon.com.br/dp/B07SSMCZ7Z', 'a tag antiga sai do link');
 });
 
 test.after(() => {

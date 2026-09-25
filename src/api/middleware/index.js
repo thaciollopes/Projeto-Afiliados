@@ -13,6 +13,8 @@ export const asyncHandler = (fn) => (req, res, next) => {
 export function auth(req, res, next) {
   if (!config.app.token) return next();
   if (req.path === '/config' || req.path === '/health') return next();
+  // O webhook da WAHA tem a propria assinatura (HMAC); validada na rota.
+  if (req.path === '/whatsapp/webhook') return next();
 
   const enviado = req.get('x-api-token') || req.query.token || '';
   if (enviado === config.app.token) return next();

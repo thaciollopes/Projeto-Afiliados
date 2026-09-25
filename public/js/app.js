@@ -2,12 +2,14 @@
 import { api } from './api.js';
 import { erro } from './ui.js';
 import { rotas } from './router.js';
+import { secaoDaRota } from './pages/manual.js';
 
 export const estado = { config: null, alertas: 0 };
 
 const MENU = [
   { grupo: 'Principal', itens: [
     { rota: 'comece', icone: '🚀', rotulo: 'Comece aqui' },
+    { rota: 'manual', icone: '📖', rotulo: 'Manual' },
     { rota: '', icone: '📊', rotulo: 'Dashboard' },
   ] },
   { grupo: 'Lojas', itens: [
@@ -131,6 +133,11 @@ function ligarEventos() {
     document.getElementById('sidebar').classList.toggle('aberta');
   };
   document.getElementById('btn-atualizar').onclick = () => navegar();
+  document.getElementById('btn-ajuda').onclick = () => {
+    const rota = location.hash.replace(/^#\/?/, '').split(/[/?]/)[0];
+    const secao = secaoDaRota(rota);
+    location.hash = secao ? `#/manual/${secao}` : '#/manual';
+  };
   document.getElementById('btn-alertas').onclick = () => { location.hash = '#/status'; };
   window.addEventListener('hashchange', navegar);
 }

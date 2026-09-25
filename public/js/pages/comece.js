@@ -82,7 +82,7 @@ export async function renderComece() {
       <div class="cartao">
         <h3>Se travar em alguma coisa</h3>
         <ul class="pequeno texto-fraco" style="padding-left:18px;line-height:1.9;margin:0">
-          <li><strong>Guia completo:</strong> arquivo <code>docs/GUIA_DO_USUARIO.md</code> na pasta do projeto</li>
+          <li><strong>Passo a passo de cada função:</strong> <a href="#/manual">📖 Manual</a> (ou o botão 📖 Ajuda no topo de qualquer tela)</li>
           <li><strong>Deu erro:</strong> <code>docs/TROUBLESHOOTING.md</code> — está por sintoma</li>
           <li><strong>WhatsApp:</strong> <code>docs/WAHA.md</code></li>
           <li><strong>Ver o que o sistema registrou:</strong> <a href="#/sistema">SISTEMA → Logs</a> ou <code>VER-LOGS.bat</code></li>

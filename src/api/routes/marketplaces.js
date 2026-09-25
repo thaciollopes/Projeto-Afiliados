@@ -10,9 +10,13 @@ import {
   salvarSessao, resumoSessao, removerSessao,
 } from '../../core/services/sessaoLojaService.js';
 import { tagDaLoja, salvarTagDaLoja } from '../../core/services/lojaService.js';
+import { tagDeAfiliado } from '../../core/services/mercadoLivreLinkService.js';
 import {
-  converterLinks, converterProdutos, tagDeAfiliado,
-} from '../../core/services/mercadoLivreLinkService.js';
+  lojaConverteLinkPorCookie, converterLinkAvulso, converterProdutosDaLoja,
+} from '../../core/services/linkPorCookieService.js';
+import {
+  verificarLink, verificarProdutosDaLoja, lojasConferiveis,
+} from '../../core/services/verificacaoLinkService.js';
 import { badRequest, notFound } from '../../core/utils/errors.js';
 
 export const marketplacesRouter = Router();
@@ -37,6 +41,8 @@ function resumoLoja(loja) {
     dica_cookie: loja.dicaCookie,
     como_entram_produtos: loja.comoEntramProdutos,
     tag,
+    converte_por_cookie: lojaConverteLinkPorCookie(loja.id),
+    conferivel: lojasConferiveis().includes(loja.id),
     tag_propria: loja.id === 'mercadolivre' ? Boolean(tagDaLoja(loja.id)) : Boolean(tag),
     sessao: resumoSessao(loja.id),
   };
@@ -67,7 +73,11 @@ marketplacesRouter.delete('/:loja/sessao', asyncHandler(async (req, res) => {
 marketplacesRouter.put('/:loja/tag', asyncHandler(async (req, res) => {
   const loja = lojaOu404(req.params.loja);
   const resultado = salvarTagDaLoja(loja, req.body?.tag);
-  res.json({ ...resumoLoja(loja), reaplicados: resultado.atualizados });
+  res.json({
+    ...resumoLoja(loja),
+    reaplicados: resultado.atualizados,
+    links_para_refazer: resultado.links_para_refazer || 0,
+  });
 }));
 
 /** Teste de busca: prova que a loja responde, sem gravar nada. */
@@ -97,18 +107,45 @@ marketplacesRouter.post('/:loja/testar', asyncHandler(async (req, res) => {
   }
 }));
 
-// -------------------------- Mercado Livre: link de afiliado (cookie) --
+// ------------------- link de afiliado pela sessão (Mercado Livre, Shopee) --
+
+function lojaPorCookieOu400(id) {
+  const loja = lojaOu404(id);
+  if (!lojaConverteLinkPorCookie(loja.id)) throw badRequest(`${loja.nome} não gera link pelo cookie.`);
+  return loja;
+}
 
 /** Converte um link avulso (teste na tela LOJAS). */
-marketplacesRouter.post('/mercadolivre/converter-link', asyncHandler(async (req, res) => {
+marketplacesRouter.post('/:loja/converter-link', asyncHandler(async (req, res) => {
+  const loja = lojaPorCookieOu400(req.params.loja);
   const url = String(req.body?.url || '').trim();
-  if (!url) throw badRequest('Informe o link do produto do Mercado Livre.');
-  const r = await converterLinks([url]);
-  const item = r.resultados[0] || {};
-  res.json({ ok: Boolean(item.link), original: url, link: item.link || null, erro: item.erro || null, tag: r.tag });
+  if (!url) throw badRequest(`Informe o link do produto da ${loja.nome}.`);
+  const r = await converterLinkAvulso(loja.id, url);
+  // Já confere o ID: é a prova de que o link gerado paga você.
+  const conferencia = r.link ? await verificarLink(loja.id, r.link).catch(() => null) : null;
+  res.json({ ...r, conferencia });
 }));
 
-/** Converte todos os produtos do ML que ainda estão sem link de afiliado. */
-marketplacesRouter.post('/mercadolivre/converter', asyncHandler(async (req, res) => {
-  res.json(await converterProdutos({ ids: req.body?.ids || null }));
+/** Converte todos os produtos da loja que ainda estão sem link de afiliado. */
+marketplacesRouter.post('/:loja/converter', asyncHandler(async (req, res) => {
+  const loja = lojaPorCookieOu400(req.params.loja);
+  res.json(await converterProdutosDaLoja(loja.id, { ids: req.body?.ids || null }));
+}));
+
+// ------------------------------------------- conferência do ID de afiliado --
+
+/** Abre um link e diz se o ID de afiliado que chega na loja é o seu. */
+marketplacesRouter.post('/:loja/verificar-link', asyncHandler(async (req, res) => {
+  const loja = lojaOu404(req.params.loja);
+  const url = String(req.body?.url || '').trim();
+  res.json(await verificarLink(loja.id, url));
+}));
+
+/** Confere os links dos produtos ativos da loja. */
+marketplacesRouter.post('/:loja/verificar', asyncHandler(async (req, res) => {
+  const loja = lojaOu404(req.params.loja);
+  res.json(await verificarProdutosDaLoja(loja.id, {
+    limite: req.body?.limite,
+    forcar: Boolean(req.body?.forcar),
+  }));
 }));

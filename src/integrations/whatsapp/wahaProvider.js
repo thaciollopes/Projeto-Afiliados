@@ -1,17 +1,25 @@
 /**
  * WAHA (https://waha.devlike.pro) - WhatsApp via sessao nao oficial.
- * Endpoints usados: /api/sessions, /api/sendText, /api/sendImage, /api/{s}/groups
+ * Endpoints usados: /api/sessions, /api/sendText, /api/sendImage, /api/{s}/groups,
+ * /api/{s}/channels, /api/startTyping, /api/stopTyping
  */
+import crypto from 'node:crypto';
 import { logger } from '../../core/utils/logger.js';
 
 const log = logger.child('waha');
 
 export class WahaProvider {
-  constructor({ baseUrl, session, apiKey } = {}) {
+  constructor({ baseUrl, session, apiKey, digitando = true } = {}) {
     this.name = 'waha';
     this.baseUrl = String(baseUrl || 'http://localhost:3003').replace(/\/+$/, '');
     this.session = session || 'default';
     this.apiKey = apiKey || '';
+    this.digitando = digitando;
+  }
+
+  // Separado para o teste nao ficar esperando segundos de verdade.
+  esperar(ms) {
+    return new Promise((ok) => setTimeout(ok, ms));
   }
 
   headers() {
@@ -98,12 +106,39 @@ export class WahaProvider {
     })).filter((g) => g.identificador);
   }
 
+  /** Canais do WhatsApp em que a sessao pode postar (dono ou admin). */
+  async listChannels() {
+    const data = await this.request(`/api/${encodeURIComponent(this.session)}/channels`, { timeoutMs: 30000 });
+    return (Array.isArray(data) ? data : [])
+      .filter((c) => ['OWNER', 'ADMIN'].includes(String(c.role || '').toUpperCase()))
+      .map((c) => ({ identificador: c.id, nome: c.name || c.id, tipo: 'canal', participantes: null }));
+  }
+
+  /**
+   * "Digitando..." antes de enviar, com tempo proporcional ao texto: um numero
+   * que posta instantaneamente em dez grupos e o padrao que o WhatsApp mais
+   * associa a robo. Canal (@newsletter) nao tem digitacao. Falha aqui nunca
+   * impede o envio.
+   */
+  async simularDigitacao(chatId, texto) {
+    if (!this.digitando || /@newsletter$/i.test(chatId)) return;
+    const body = { session: this.session, chatId };
+    try {
+      await this.request('/api/startTyping', { method: 'POST', body, timeoutMs: 8000 });
+      await this.esperar(tempoDigitando(texto));
+      await this.request('/api/stopTyping', { method: 'POST', body, timeoutMs: 8000 });
+    } catch (err) {
+      log.warn(`Nao consegui mostrar "digitando": ${err.message}`, { chatId });
+    }
+  }
+
   /**
    * @param {{chatId:string, texto:string, imagem?:string}} payload
    * @returns {Promise<{id:string, provider:string}>}
    */
   async sendMessage({ chatId, texto, imagem }) {
     if (!chatId) throw new Error('chatId vazio');
+    await this.simularDigitacao(chatId, texto);
 
     if (imagem) {
       try {
@@ -131,4 +166,41 @@ export class WahaProvider {
     });
     return { id: res?.id?._serialized || res?.id || 'sem-id', provider: 'waha', comImagem: false };
   }
+}
+
+/** 2 a 6 segundos: o suficiente para parecer gente, sem travar a fila. */
+export function tempoDigitando(texto) {
+  const caracteres = String(texto || '').length;
+  return Math.min(6000, Math.max(2000, caracteres * 25));
+}
+
+/**
+ * O webhook veio mesmo da SUA WAHA? Ela assina o corpo com HMAC-SHA512
+ * (WHATSAPP_HOOK_HMAC_KEY) no header X-Webhook-Hmac. Sem isso, qualquer um
+ * que achasse a URL poderia fazer o sistema responder mensagens.
+ */
+export function assinaturaWebhookValida(corpoBruto, assinatura, chave) {
+  if (!chave || !assinatura || !corpoBruto) return false;
+  const esperada = crypto.createHmac('sha512', chave).update(corpoBruto).digest('hex');
+  const a = Buffer.from(String(assinatura), 'utf8');
+  const b = Buffer.from(esperada, 'utf8');
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+
+/**
+ * Evento "message" da WAHA -> mensagem no formato do sistema.
+ * @returns {{id:string, de:string, texto:string, deMim:boolean, privada:boolean}|null}
+ */
+export function lerMensagemDoWebhook(corpo) {
+  if (corpo?.event !== 'message' || !corpo.payload) return null;
+  const p = corpo.payload;
+  const de = String(p.from || '');
+  return {
+    id: String(p.id || ''),
+    de,
+    texto: String(p.body || ''),
+    deMim: Boolean(p.fromMe),
+    // Grupo, canal e status nunca recebem resposta automatica.
+    privada: /@(c\.us|s\.whatsapp\.net|lid)$/i.test(de),
+  };
 }

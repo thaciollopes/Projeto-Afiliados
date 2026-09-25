@@ -42,6 +42,17 @@ export const config = {
     baseUrl: process.env.WAHA_BASE_URL || 'http://localhost:3003',
     session: process.env.WAHA_SESSION || 'default',
     apiKey: process.env.WAHA_API_KEY || '',
+    // "digitando..." antes de cada envio real (anti-bloqueio).
+    digitando: bool(process.env.WHATSAPP_DIGITANDO, true),
+    // Converter link pelo WhatsApp: voce manda um link no privado do numero
+    // de divulgacao e recebe o post pronto. Sem chave = desligado.
+    webhookChave: process.env.WHATSAPP_WEBHOOK_CHAVE || '',
+    autorizados: String(process.env.WHATSAPP_NUMEROS_AUTORIZADOS || '')
+      .split(',').map((n) => n.trim()).filter(Boolean),
+  },
+  // Canal/grupo do Telegram: bot criado no @BotFather, admin do canal.
+  telegram: {
+    token: process.env.TELEGRAM_BOT_TOKEN || '',
   },
   n8n: {
     baseUrl: process.env.N8N_BASE_URL || 'http://localhost:5678',
@@ -51,46 +62,15 @@ export const config = {
   ai: {
     provider: (process.env.AI_PROVIDER || 'mock').toLowerCase(),
     apiKey: process.env.AI_API_KEY || '',
-    model: process.env.AI_MODEL || 'claude-sonnet-5',
+    model: process.env.AI_MODEL || 'claude-opus-5',
     baseUrl: process.env.AI_BASE_URL || '',
     maxTokens: int(process.env.AI_MAX_TOKENS, 800),
   },
-  marketplaces: {
-    aliexpress: {
-      appKey: process.env.ALIEXPRESS_APP_KEY || '',
-      appSecret: process.env.ALIEXPRESS_APP_SECRET || '',
-      trackingId: process.env.ALIEXPRESS_TRACKING_ID || '',
-    },
-    amazon: {
-      accessKey: process.env.AMAZON_ACCESS_KEY || '',
-      secretKey: process.env.AMAZON_SECRET_KEY || '',
-      partnerTag: process.env.AMAZON_PARTNER_TAG || '',
-    },
-    shopee: {
-      appId: process.env.SHOPEE_APP_ID || '',
-      appSecret: process.env.SHOPEE_APP_SECRET || '',
-    },
-    mercadolivre: {
-      clientId: process.env.MERCADOLIVRE_CLIENT_ID || '',
-      clientSecret: process.env.MERCADOLIVRE_CLIENT_SECRET || '',
-      // Precisa ser exatamente a mesma URL cadastrada no app do Mercado Livre.
-      redirectUri: process.env.MERCADOLIVRE_REDIRECT_URI || '',
-    },
-    awin: {
-      apiToken: process.env.AWIN_API_TOKEN || '',
-      publisherId: process.env.AWIN_PUBLISHER_ID || '',
-    },
-  },
-  // Coleta por navegacao (scraping). Fonte NAO oficial: ver docs/AFFILIATES.md.
-  scraper: {
-    ligado: bool(process.env.SCRAPER_ENABLED, false),
-    baseUrl: bool(process.env.SCRAPER_ENABLED, false)
-      ? (process.env.BROWSERLESS_URL || 'http://localhost:3004')
-      : '',
-    token: process.env.BROWSERLESS_TOKEN || 'afiliados-local',
-    // Rajada e o que derruba: no teste, a Amazon bloqueou na 4a busca seguida.
-    intervaloSegundos: int(process.env.SCRAPER_INTERVALO_SEGUNDOS, 30),
-    cacheMinutos: int(process.env.SCRAPER_CACHE_MINUTOS, 30),
+  // Espaço entre dois envios de verdade pelo WhatsApp. Aleatório de propósito:
+  // rajada em intervalo fixo é o padrão que o WhatsApp mais associa a robô.
+  envio: {
+    pausaMinSegundos: int(process.env.ENVIO_PAUSA_MIN_SEGUNDOS, 25),
+    pausaMaxSegundos: int(process.env.ENVIO_PAUSA_MAX_SEGUNDOS, 75),
   },
   storage: {
     backupDir: abs(process.env.BACKUP_DIR || './storage/backups'),

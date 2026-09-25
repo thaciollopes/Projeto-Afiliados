@@ -23,7 +23,9 @@ export function createApp() {
 
   const app = express();
   app.disable('x-powered-by');
-  app.use(express.json({ limit: '10mb' }));
+  // Corpo bruto guardado: a assinatura (HMAC) do webhook da WAHA e calculada
+  // sobre os bytes exatos, nao sobre o JSON re-serializado.
+  app.use(express.json({ limit: '10mb', verify: (req, _res, buf) => { req.corpoBruto = buf; } }));
   app.use(express.urlencoded({ extended: true }));
   app.use(requestLogger);
 

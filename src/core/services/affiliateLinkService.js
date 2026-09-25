@@ -17,6 +17,16 @@ import { logger } from '../utils/logger.js';
 
 const log = logger.child('afiliado');
 
+/** De qual loja é este link (produto, link curto ou de afiliado). */
+export function lojaDaUrl(url) {
+  const u = String(url || '').toLowerCase();
+  if (/mercadolivre|mercadolibre|meli\.la/.test(u)) return 'mercadolivre';
+  if (/shopee|shope\.ee|shp\.ee/.test(u)) return 'shopee';
+  if (/amazon\.com|amzn\.to|\/\/a\.co\//.test(u)) return 'amazon';
+  if (/magazineluiza|magalu|magazinevoce/.test(u)) return 'magalu';
+  return null;
+}
+
 /** "amazon-web" e "shopee-painel" são fontes da mesma loja: amazon, shopee. */
 export function lojaBase(marketplace) {
   return String(marketplace || '').replace(/-(web|painel|api)$/i, '').toLowerCase();
@@ -29,6 +39,7 @@ export function lojaBase(marketplace) {
 const JA_TEM_RASTREIO = [
   /s\.shopee\./i,
   /shope\.ee/i,
+  /shp\.ee\//i,
   /amzn\.to/i,
   /mercadolivre\.com\/sec\//i,
   /meli\.la\//i,
@@ -60,7 +71,8 @@ const PARAMETRO_PADRAO = {
 const EXIGEM_LINK_DO_PAINEL = {
   mercadolivre: 'O Mercado Livre só paga comissão no link meli.la gerado pelo painel. '
     + 'Cole o cookie em LOJAS → Mercado Livre.',
-  shopee: 'A Shopee só atribui comissão ao link gerado no painel/API (s.shopee.com.br/...).',
+  shopee: 'A Shopee só paga comissão no link s.shopee.com.br gerado pelo painel. '
+    + 'Cole o cookie em LOJAS → Shopee.',
 };
 
 /**

@@ -54,10 +54,35 @@ com status 400, 401, 404, 409 ou 500.
 | POST | `/produtos/:id/melhorar-ia` | sugere texto novo (não salva) |
 | POST | `/produtos/recalcular-score` | recalcula o score de todos |
 
+### Lojas e link de afiliado
+
+| Método | Rota | O que faz |
+|---|---|---|
+| GET | `/marketplaces` | lojas, tag, sessão (sem valor de cookie) |
+| PUT | `/marketplaces/:loja/sessao` | salva o cookie (`{ cookies }`) |
+| PUT | `/marketplaces/:loja/tag` | salva a tag/ID e reaplica nos produtos |
+| POST | `/marketplaces/:loja/converter-link` | gera o link de afiliado de um link (`mercadolivre`, `shopee`) e confere o ID |
+| POST | `/marketplaces/:loja/converter` | gera o link dos produtos da loja que ainda não têm |
+| POST | `/marketplaces/:loja/verificar-link` | abre um link e diz se o ID no destino é o seu (`confere`: true/false/null) |
+| POST | `/marketplaces/:loja/verificar` | confere os produtos ativos da loja (`limite`, `forcar`) |
+
+### WhatsApp: converter no privado
+
+| Método | Rota | O que faz |
+|---|---|---|
+| POST | `/whatsapp/webhook` | recebe o evento `message` da WAHA, assinado com HMAC-SHA512 (`X-Webhook-Hmac`). Sem `WHATSAPP_WEBHOOK_CHAVE`: 403. Número fora de `WHATSAPP_NUMEROS_AUTORIZADOS`: ignorado |
+
+### Planilha
+
+| Método | Rota | O que faz |
+|---|---|---|
+| POST | `/sistema/importar-planilha` | `{ arquivo: <base64 ou data URL>, nome: "x.xlsx" }` — o que o painel usa |
+| POST | `/sistema/importar-excel` | `{ caminho }` — só arquivos dentro da pasta `storage` |
+
 **Buscar:**
 ```http
 POST /api/produtos/buscar
-{ "termo": "perfume feminino", "marketplaces": ["demo"],
+{ "termo": "perfume feminino", "marketplaces": ["mercadolivre"],
   "precoMax": 150, "descontoMin": 20, "ordenacao": "vendas", "limite": 20 }
 ```
 

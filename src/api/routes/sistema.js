@@ -13,7 +13,7 @@ import { firstSteps } from '../../core/services/onboardingService.js';
 import {
   createBackup, listBackups, restoreBackup, runCleanup, cleanupSettings, saveCleanupSettings,
 } from '../../core/services/maintenanceService.js';
-import { exportToExcel, importProductsFromExcel } from '../../core/services/excelService.js';
+import { exportToExcel, importProductsFromExcel, importarPlanilhaEnviada } from '../../core/services/excelService.js';
 import { logRepository, alertRepository, settingRepository } from '../../core/repositories/index.js';
 import { expireCoupons } from '../../core/services/couponService.js';
 import { expirePromotions } from '../../core/services/promotionService.js';
@@ -133,6 +133,11 @@ sistemaRouter.get('/download/:arquivo', asyncHandler(async (req, res) => {
 sistemaRouter.post('/importar-excel', asyncHandler(async (req, res) => {
   if (!req.body?.caminho) throw badRequest('informe o caminho do arquivo .xlsx');
   res.json(await importProductsFromExcel(req.body.caminho));
+}));
+
+/** Planilha enviada pelo painel (o arquivo vem no corpo, em base64). */
+sistemaRouter.post('/importar-planilha', asyncHandler(async (req, res) => {
+  res.json(await importarPlanilhaEnviada(req.body?.arquivo, req.body?.nome));
 }));
 
 // ---------------------------------------------------------------- ia --

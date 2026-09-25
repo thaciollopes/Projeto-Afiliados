@@ -18,7 +18,7 @@ O código antigo de API está em `_arquivo/`, só para consulta.
 |---|---|---|---|
 | Mercado Livre | ✅ pelas **ofertas** (a busca comum dá captcha) | cookie → o sistema gera `meli.la` | busca do sistema ou extensão |
 | Amazon | ✅ | tag no link (`?tag=seuid-20`) | busca do sistema ou extensão |
-| Shopee | ❌ lista não renderiza | só o link do painel da Shopee | extensão do navegador |
+| Shopee | ❌ lista não renderiza | cookie → o sistema gera `s.shopee.com.br` | extensão do navegador |
 | Magazine Luiza | ❌ acesso recusado | link da sua loja Parceiro Magalu | extensão do navegador |
 
 O catálogo acima mora em `src/integrations/marketplaces/lojas.js`. É de lá que a tela
@@ -73,7 +73,41 @@ sistema varre até 8 páginas e filtra pelo título (`mercadolivreOfertas.js`).
 - Se a loja pedir captcha, a busca falha dizendo isso — nunca devolve lista vazia fingindo
   que não achou nada.
 
-## Shopee e Magalu
+## Shopee: `s.shopee.com.br` pelo cookie
 
-Produtos entram pela extensão. O link que paga é o gerado no painel de afiliado da loja:
+Mesmo esquema do ML. `src/core/services/shopeeLinkService.js` faz a chamada da página
+**Link personalizado** do painel (`affiliate.shopee.com.br/offer/custom_link`): GraphQL
+`batchGetCustomLink`, até 5 links por vez, com o cookie da sessão.
+
+- Cookie: exporte logado em `affiliate.shopee.com.br` — o `SPC_EC` precisa vir junto.
+- A Shopee não aceita tag no pedido: o link sai na conta **do cookie**. O "ID de
+  afiliado" em LOJAS serve para **conferir** — se o link voltar com `affiliate_id`
+  diferente, nada é gravado e o erro diz os dois IDs.
+- O link do produto vai limpo (`shopee.com.br/product/<loja>/<item>`): o `sp_atk`/`utm`
+  de quem compartilhou não vai junto.
+- **Não validado contra a Shopee de verdade** a partir deste ambiente (a rede daqui não
+  alcança a Shopee). O formato segue projetos open source que usam o mesmo endpoint;
+  teste com "Converter" em LOJAS → Shopee antes de confiar.
+
+## Magalu
+
+Produtos entram pela extensão. O link que paga é o da sua loja Parceiro Magalu:
 cole-o no campo **Link de afiliado** do produto.
+
+## Conferência do ID de afiliado
+
+Link curto não prova de quem é a comissão. `verificacaoLinkService.js` abre o link como
+o cliente abriria (seguindo os redirecionamentos) e lê o ID no destino:
+
+| Loja | Onde o ID aparece |
+|---|---|
+| Mercado Livre | `matt_word=<sua tag>` |
+| Shopee | `affiliate_id=<seu ID>` ou `utm_source=an_<seu ID>` |
+| Amazon | `tag=<sua tag>` (sem rede: está no próprio link) |
+
+- A fila confere antes de publicar (uma vez por link; fica em `link_checks`).
+- ID de **outra conta** → a publicação é **bloqueada**.
+- Não deu para concluir (rede, ID não cadastrado, formato mudou) → aviso "não
+  conferido". Nunca vira "ok" sem prova.
+- Trocou a tag do ML: os `meli.la` antigos voltam para o link cru e são gerados de novo.
+- Em LOJAS: **Conferir link** (um link colado) e **Conferir os produtos** (até 30).

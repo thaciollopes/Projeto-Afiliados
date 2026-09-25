@@ -14,9 +14,11 @@ import { renderPublication } from './templateService.js';
 import { activePromotionFor } from './promotionService.js';
 import { bestCouponFor, registerUse } from './couponService.js';
 import { exigeLinkDoPainel, lojaBase } from './affiliateLinkService.js';
-import { converterProdutos, jaEhLinkDeAfiliado } from './mercadoLivreLinkService.js';
-import { cookiesDaSessao } from './sessaoLojaService.js';
-import { getWhatsAppProvider } from '../../integrations/whatsapp/index.js';
+import { podeConverter, converterProdutosDaLoja } from './linkPorCookieService.js';
+import { verificarProduto } from './verificacaoLinkService.js';
+import { seloMenorPreco } from './historicoPrecoService.js';
+import { linkParaCanal, subIdDoCanal } from './linkPorCanalService.js';
+import { mensageiroDo, precisaPausaAntiBloqueio } from '../../integrations/mensageiros.js';
 import { generate } from '../../integrations/ai/index.js';
 import { config } from '../../config/index.js';
 import { nowIso, localHHMM, hhmmToMinutes, localDay, addMinutes } from '../utils/dates.js';
@@ -37,20 +39,41 @@ export const MAX_TENTATIVAS = RETRY_MINUTOS.length;
  */
 export async function buildPublication({
   product_id, promotion_id, coupon_id, template_id, usar_ia = false, reference = new Date(),
+  channel_id = null,
 } = {}) {
   let produto = productRepository.findById(product_id);
   if (!produto) throw notFound('Produto');
 
-  // Ultima chance antes de publicar sem comissao: produto do ML sem meli.la e
-  // com sessao salva -> converte agora. Falhou, segue com o aviso no preview.
-  if (lojaBase(produto.marketplace) === 'mercadolivre'
-      && !jaEhLinkDeAfiliado(produto.url_final)
-      && cookiesDaSessao('mercadolivre')?.length) {
+  // Ultima chance antes de publicar sem comissao: produto do ML/Shopee sem
+  // link de afiliado e com sessao salva -> converte agora. Falhou, segue com
+  // o aviso no preview.
+  if (podeConverter(produto)) {
     try {
-      await converterProdutos({ ids: [produto.id] });
+      await converterProdutosDaLoja(produto.marketplace, { ids: [produto.id] });
       produto = productRepository.findById(product_id);
     } catch (err) {
-      log.warn(`Nao consegui converter o link do ML agora: ${err.message}`, { product_id });
+      log.warn(`Nao consegui gerar o link de afiliado agora: ${err.message}`, { product_id });
+    }
+  }
+
+  // Link curto nao prova de quem e a comissao: abre e le o ID no destino.
+  // So vai a rede uma vez por link (o resultado fica guardado).
+  let conferencia = null;
+  try {
+    conferencia = await verificarProduto(produto);
+  } catch (err) {
+    log.warn(`Nao consegui conferir o link de afiliado: ${err.message}`, { product_id });
+  }
+
+  // Com o grupo conhecido, a Shopee ganha um link com o sub ID do grupo (so
+  // neste post; o produto continua com o link normal).
+  let linkCanal = null;
+  if (channel_id) {
+    const canal = channelRepository.findById(channel_id);
+    const link = await linkParaCanal(produto, canal);
+    if (link) {
+      linkCanal = { link, sub_id: subIdDoCanal(canal) };
+      produto = { ...produto, url_afiliado: link, url_final: link };
     }
   }
 
@@ -84,11 +107,19 @@ export async function buildPublication({
     }
   }
 
+  const menorPreco = seloMenorPreco(produto, { reference });
   const { mensagem } = renderPublication({
-    template, product: produtoParaTexto, pricing: precos, promotion: promocao, coupon: precos.cupom,
+    template,
+    product: produtoParaTexto,
+    pricing: precos,
+    promotion: promocao,
+    coupon: precos.cupom,
+    extras: { menor_preco: menorPreco?.selo },
   });
 
-  const { bloqueios, avisos } = validatePublication({ produto, precos, promocao, cupom, mensagem });
+  const { bloqueios, avisos } = validatePublication({
+    produto, precos, promocao, cupom, mensagem, conferencia,
+  });
 
   return {
     mensagem,
@@ -101,12 +132,16 @@ export async function buildPublication({
     bloqueios,
     avisos,
     ia,
+    conferencia_link: conferencia,
+    link_canal: linkCanal,
     pode_publicar: bloqueios.length === 0,
   };
 }
 
 /** O que impede a publicacao (bloqueio) e o que so merece aviso. */
-export function validatePublication({ produto, precos, promocao, cupom, mensagem }) {
+export function validatePublication({
+  produto, precos, promocao, cupom, mensagem, conferencia = null,
+}) {
   const bloqueios = [];
   const avisos = [];
 
@@ -127,13 +162,20 @@ export function validatePublication({ produto, precos, promocao, cupom, mensagem
 
   // O pior erro silencioso do ramo: publicar bonito e nao ganhar comissao.
   const exige = exigeLinkDoPainel(produto.marketplace);
-  const linkTemRastreio = /\/sec\/|meli\.la\/|s\.shopee\.|shope\.ee|amzn\.to|s\.click\.aliexpress\./i
+  const linkTemRastreio = /\/sec\/|meli\.la\/|s\.shopee\.|shope\.ee|shp\.ee|amzn\.to|s\.click\.aliexpress\./i
     .test(produto.url_final || '');
 
   if (exige && !linkTemRastreio) {
     avisos.push(`SEM COMISSAO: ${exige} Cole o link gerado no painel no campo "Link de afiliado" do produto.`);
   } else if (!produto.url_afiliado) {
     avisos.push('Sem link de afiliado: usando o link original (a venda nao sera atribuida a voce)');
+  }
+
+  // Comissao para outra conta e pior que sem comissao: bloqueia.
+  if (conferencia?.confere === false) {
+    bloqueios.push(`Link de afiliado de OUTRA conta: ${conferencia.motivo}`);
+  } else if (conferencia?.confere === null && linkTemRastreio) {
+    avisos.push(`ID de afiliado nao conferido: ${conferencia.motivo}`);
   }
 
   return { bloqueios, avisos };
@@ -167,7 +209,9 @@ export async function enqueue({
     throw badRequest(`Produto ja publicado neste canal nos ultimos ${nao_repetir_dias} dias`);
   }
 
-  const post = await buildPublication({ product_id, promotion_id, coupon_id, template_id, usar_ia });
+  const post = await buildPublication({
+    product_id, promotion_id, coupon_id, template_id, usar_ia, channel_id,
+  });
   if (post.bloqueios.length) {
     throw badRequest(`Publicacao bloqueada: ${post.bloqueios.join('; ')}`, { bloqueios: post.bloqueios });
   }
@@ -224,6 +268,7 @@ export function channelWindowOpen(canal, reference = new Date()) {
  */
 export async function processQueue({ limite = 10, reference = new Date(), forcar = false } = {}) {
   const agora = reference.toISOString();
+  liberarEnviosTravados();
 
   const candidatas = publicationRepository.list({
     filters: { status: ['aguardando', 'erro'] },
@@ -258,8 +303,23 @@ export async function processQueue({ limite = 10, reference = new Date(), forcar
       }
     }
 
+    // Anti-bloqueio: um envio de verdade por vez, com pausa sorteada entre
+    // eles. O que nao cabe agora fica na fila para o proximo ciclo.
+    const comPausa = !pub.dry_run && !config.runtime.dryRun && precisaPausaAntiBloqueio(canal);
+    if (comPausa && !forcar && Date.now() < proximoEnvioPermitido) {
+      resultado.adiadas += 1;
+      resultado.detalhes.push({ id: pub.id, status: 'adiada', motivo: 'pausa_entre_envios' });
+      continue;
+    }
+
     resultado.processadas += 1;
     const envio = await sendPublication(pub, canal);
+    if (envio.ignorada) {
+      resultado.processadas -= 1;
+      resultado.detalhes.push({ id: pub.id, status: 'ignorada', motivo: envio.erro });
+      continue;
+    }
+    if (comPausa) proximoEnvioPermitido = Date.now() + sortearPausaMs();
     if (envio.ok) resultado.enviadas += 1; else resultado.erros += 1;
     resultado.detalhes.push({ id: pub.id, status: envio.ok ? 'enviada' : 'erro', motivo: envio.erro || null });
   }
@@ -270,11 +330,48 @@ export async function processQueue({ limite = 10, reference = new Date(), forcar
   return resultado;
 }
 
+let proximoEnvioPermitido = 0;
+
+/** Pausa aleatoria entre dois envios reais (ENVIO_PAUSA_MIN/MAX_SEGUNDOS). */
+export function sortearPausaMs() {
+  const min = Math.max(0, Number(config.envio.pausaMinSegundos) || 0);
+  const max = Math.max(min, Number(config.envio.pausaMaxSegundos) || 0);
+  return Math.round((min + Math.random() * (max - min)) * 1000);
+}
+
+/** Para testes e para quem precisa zerar o espacamento (ex.: reinicio manual). */
+export function zerarPausaEntreEnvios() {
+  proximoEnvioPermitido = 0;
+}
+
+/**
+ * Publicacao presa em "enviando" (o app caiu no meio do envio) vira erro
+ * DEFINITIVO com alerta: a mensagem pode ter saido, entao reenviar sozinho
+ * arriscaria post duplicado no grupo.
+ */
+function liberarEnviosTravados() {
+  const limite = new Date(Date.now() - 10 * 60000).toISOString();
+  const travadas = publicationRepository.list({
+    filters: { status: 'enviando', atualizado_em: { lt: limite } },
+    limit: 100,
+  });
+  for (const pub of travadas) {
+    marcarErro(pub, 'Envio interrompido (o app parou no meio). Confira no grupo se saiu antes de reenviar.', true);
+  }
+}
+
 /** Envia de fato (ou simula, se dry run). Atualiza status, produto e canal. */
 export async function sendPublication(pub, canal = null) {
   const destino = canal || channelRepository.findById(pub.channel_id);
   if (!destino) return { ok: false, erro: 'Canal nao encontrado' };
 
+  // Reserva antes de enviar: worker, n8n e o botao "enviar" podem pegar a
+  // mesma publicacao. Ler e marcar sem await no meio e atomico no Node —
+  // quem chega depois ve "enviando" e desiste, em vez de postar duplicado.
+  const atual = publicationRepository.findById(pub.id);
+  if (!atual || !['aguardando', 'erro'].includes(atual.status)) {
+    return { ok: false, ignorada: true, erro: `Publicacao ja esta "${atual?.status || 'removida'}"` };
+  }
   publicationRepository.update(pub.id, { status: 'enviando' });
 
   const simular = Boolean(pub.dry_run) || config.runtime.dryRun;
@@ -285,8 +382,7 @@ export async function sendPublication(pub, canal = null) {
       envio = { id: `dry_${pub.id}`, provider: 'dry-run', simulado: true };
       log.info(`[DRY RUN] Nao enviado de verdade para ${destino.nome}`, { publicacao: pub.id });
     } else {
-      const provider = getWhatsAppProvider({ session: destino.sessao || undefined });
-      envio = await provider.sendMessage({
+      envio = await mensageiroDo(destino).sendMessage({
         chatId: destino.identificador,
         texto: pub.mensagem,
         imagem: pub.imagem || undefined,
@@ -339,7 +435,8 @@ function marcarErro(pub, mensagem, definitivo) {
   publicationRepository.update(pub.id, {
     status: 'erro',
     erro: String(mensagem).slice(0, 500),
-    tentativas,
+    // Definitivo tem que parar de vez: a fila so desiste com tentativas no teto.
+    tentativas: definitivo ? Math.max(tentativas, MAX_TENTATIVAS) : tentativas,
     proxima_tentativa: definitivo ? null : addMinutes(new Date(), espera).toISOString(),
   });
 
