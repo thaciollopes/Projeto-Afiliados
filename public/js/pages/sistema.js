@@ -165,6 +165,8 @@ async function abaBackup() {
       <div class="cartao-titulo">
         <div><h3>Backups</h3><p>Cópia do banco + um JSON legível. Guardamos os 15 mais recentes.</p></div>
         <div class="linha">
+          <button class="btn" id="importar-planilha" title="Colunas: titulo, preco, preco_anterior, url, imagem, categoria">📥 Importar planilha de produtos</button>
+          <input type="file" id="arquivo-planilha" accept=".xlsx" hidden>
           <button class="btn" id="exportar">📊 Exportar Excel</button>
           <button class="btn-primario" id="novo">💾 Fazer backup agora</button>
         </div>
@@ -198,6 +200,20 @@ async function abaBackup() {
     const r = await tentar(() => api.post('/sistema/backups', { rotulo: 'manual' }));
     if (r) { ok(`Backup criado (${r.tamanho_mb} MB)`); location.hash = '#/sistema'; }
   };
+  const seletor = caixa.querySelector('#arquivo-planilha');
+  caixa.querySelector('#importar-planilha').onclick = () => seletor.click();
+  seletor.onchange = () => {
+    const arquivo = seletor.files?.[0];
+    if (!arquivo) return;
+    const leitor = new FileReader();
+    leitor.onload = async () => {
+      const r = await tentar(() => api.post('/sistema/importar-planilha', { arquivo: leitor.result, nome: arquivo.name }));
+      if (r) ok(`${r.lidos} linha(s) lidas: ${r.criados} novos, ${r.atualizados} atualizados`);
+      seletor.value = '';
+    };
+    leitor.readAsDataURL(arquivo);
+  };
+
   caixa.querySelector('#exportar').onclick = async () => {
     const r = await tentar(() => api.post('/sistema/exportar', {}));
     if (r) { ok('Planilha gerada'); window.open(r.download, '_blank'); }

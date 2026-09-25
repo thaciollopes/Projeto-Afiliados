@@ -15,7 +15,7 @@
  */
 import { config } from '../../config/index.js';
 import { productRepository } from '../repositories/index.js';
-import { buildAffiliateUrl } from './affiliateLinkService.js';
+import { buildAffiliateUrl, lojaDaUrl } from './affiliateLinkService.js';
 import { converterLinks as converterMl } from './mercadoLivreLinkService.js';
 import { converterLinks as converterShopee, linkLimpo as linkLimpoShopee } from './shopeeLinkService.js';
 import { seguirLink, verificarLink } from './verificacaoLinkService.js';
@@ -37,14 +37,8 @@ export function extrairLinks(texto) {
     .slice(0, MAX_LINKS_POR_MENSAGEM);
 }
 
-export function lojaDoLink(url) {
-  const u = String(url || '').toLowerCase();
-  if (/mercadolivre|mercadolibre|meli\.la/.test(u)) return 'mercadolivre';
-  if (/shopee|shope\.ee|shp\.ee/.test(u)) return 'shopee';
-  if (/amazon\.com|amzn\.to|\/\/a\.co\//.test(u)) return 'amazon';
-  if (/magazineluiza|magalu|magazinevoce/.test(u)) return 'magalu';
-  return null;
-}
+/** Mantido com este nome: é como o resto deste arquivo (e os testes) chamam. */
+export const lojaDoLink = lojaDaUrl;
 
 /** Só os dígitos, para comparar "5511 99999-9999" com "5511999999999@c.us". */
 function digitos(texto) {

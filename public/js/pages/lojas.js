@@ -195,6 +195,11 @@ export async function renderLojas() {
       </div>
       <details class="mt">
         <summary><strong class="pequeno">Como pegar o cookie (1 minuto por loja)</strong></summary>
+        <p class="pequeno" style="margin:6px 0 0">
+          <strong>Mais fácil:</strong> com a extensão <strong>Capturar Ofertas</strong> instalada, abra a loja logada
+          e clique em <strong>Conectar loja ao painel</strong>. <a href="#/manual/lojas">Ver no manual</a>.
+          Sem a extensão, pelo Cookie Editor:
+        </p>
         <ol class="pequeno texto-fraco" style="padding-left:18px;line-height:1.9;margin:6px 0 0">
           <li>Instale a extensão <a href="https://chromewebstore.google.com/detail/cookie-editor/hlkenndednhfkekhgcdicdfddnkalmdm" target="_blank" rel="noopener"><strong>Cookie Editor</strong></a> no Chrome.</li>
           <li>Abra a loja (ou o painel de afiliado dela) e <strong>faça login</strong>.</li>

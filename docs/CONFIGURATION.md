@@ -110,6 +110,17 @@ ENVIO_PAUSA_MIN_SEGUNDOS=25   # pausa aleatória entre dois envios de verdade
 ENVIO_PAUSA_MAX_SEGUNDOS=75
 ```
 
+```env
+WHATSAPP_DIGITANDO=true              # "digitando..." 2-6 s antes de cada post
+TELEGRAM_BOT_TOKEN=                  # bot do @BotFather, admin do canal
+WHATSAPP_WEBHOOK_CHAVE=              # converter no privado; vazio = desligado
+WHATSAPP_NUMEROS_AUTORIZADOS=5511999999999   # quem pode usar o conversor
+WAHA_HOOK_URL=http://host.docker.internal:3010/api/whatsapp/webhook
+```
+
+`WHATSAPP_WEBHOOK_CHAVE` é lida pelo app **e** pelo `docker-compose.waha.yml` (vira a
+chave HMAC da WAHA). Depois de mudar, suba a WAHA de novo.
+
 Campanha com 10 grupos não dispara 10 mensagens no mesmo segundo: cada envio real
 espera uma pausa sorteada nesse intervalo (o resto fica na fila para o próximo ciclo).
 No `DRY_RUN` não há pausa.

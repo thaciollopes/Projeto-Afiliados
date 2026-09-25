@@ -147,7 +147,7 @@ coisa.
 
 | Preciso de… | Arquivo |
 |---|---|
-| Guia completo de uso | `docs/GUIA_DO_USUARIO.md` |
+| Guia completo de uso | menu **📖 Manual** no painel |
 | Resolver problema | `docs/TROUBLESHOOTING.md` |
 | Configurar o `.env` | `docs/CONFIGURATION.md` |
 | WhatsApp | `docs/WAHA.md` |

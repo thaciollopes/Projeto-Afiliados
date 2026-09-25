@@ -17,6 +17,16 @@ import { logger } from '../utils/logger.js';
 
 const log = logger.child('afiliado');
 
+/** De qual loja é este link (produto, link curto ou de afiliado). */
+export function lojaDaUrl(url) {
+  const u = String(url || '').toLowerCase();
+  if (/mercadolivre|mercadolibre|meli\.la/.test(u)) return 'mercadolivre';
+  if (/shopee|shope\.ee|shp\.ee/.test(u)) return 'shopee';
+  if (/amazon\.com|amzn\.to|\/\/a\.co\//.test(u)) return 'amazon';
+  if (/magazineluiza|magalu|magazinevoce/.test(u)) return 'magalu';
+  return null;
+}
+
 /** "amazon-web" e "shopee-painel" são fontes da mesma loja: amazon, shopee. */
 export function lojaBase(marketplace) {
   return String(marketplace || '').replace(/-(web|painel|api)$/i, '').toLowerCase();

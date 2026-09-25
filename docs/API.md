@@ -66,6 +66,19 @@ com status 400, 401, 404, 409 ou 500.
 | POST | `/marketplaces/:loja/verificar-link` | abre um link e diz se o ID no destino é o seu (`confere`: true/false/null) |
 | POST | `/marketplaces/:loja/verificar` | confere os produtos ativos da loja (`limite`, `forcar`) |
 
+### WhatsApp: converter no privado
+
+| Método | Rota | O que faz |
+|---|---|---|
+| POST | `/whatsapp/webhook` | recebe o evento `message` da WAHA, assinado com HMAC-SHA512 (`X-Webhook-Hmac`). Sem `WHATSAPP_WEBHOOK_CHAVE`: 403. Número fora de `WHATSAPP_NUMEROS_AUTORIZADOS`: ignorado |
+
+### Planilha
+
+| Método | Rota | O que faz |
+|---|---|---|
+| POST | `/sistema/importar-planilha` | `{ arquivo: <base64 ou data URL>, nome: "x.xlsx" }` — o que o painel usa |
+| POST | `/sistema/importar-excel` | `{ caminho }` — só arquivos dentro da pasta `storage` |
+
 **Buscar:**
 ```http
 POST /api/produtos/buscar

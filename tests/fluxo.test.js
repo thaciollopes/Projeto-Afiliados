@@ -26,6 +26,8 @@ const produtos = await import('../src/core/services/productService.js');
 const { TEMPLATES_PADRAO } = await import('../src/core/services/templateService.js');
 const { config } = await import('../src/config/index.js');
 const { seloMenorPreco } = await import('../src/core/services/historicoPrecoService.js');
+const { importarPlanilhaEnviada, importProductsFromExcel } = await import('../src/core/services/excelService.js');
+const { default: ExcelJS } = await import('exceljs');
 
 getDb();
 
@@ -270,6 +272,28 @@ test('selo "menor preço": só com histórico que prove a queda', () => {
 
   const semHistorico = criar('SELO-4', diasAtras(20));
   assert.equal(seloMenorPreco(semHistorico, { reference: agora }), null, 'preço parado não é queda');
+});
+
+async function planilhaBase64(linhas) {
+  const wb = new ExcelJS.Workbook();
+  const aba = wb.addWorksheet('produtos');
+  aba.addRow(['titulo', 'preco', 'url']);
+  for (const l of linhas) aba.addRow(l);
+  return Buffer.from(await wb.xlsx.writeBuffer()).toString('base64');
+}
+
+test('planilha: a segunda não sobrescreve a primeira e a loja vem do link', async () => {
+  await importarPlanilhaEnviada(await planilhaBase64([['Fone A', 99.9, 'https://produto.mercadolivre.com.br/MLB-111-fone']]), 'a.xlsx');
+  await importarPlanilhaEnviada(await planilhaBase64([['Mouse B', 49.9, 'https://www.amazon.com.br/dp/B0MOUSE001']]), 'b.xlsx');
+
+  const a = repos.productRepository.findOne({ titulo_original: 'Fone A' });
+  const b = repos.productRepository.findOne({ titulo_original: 'Mouse B' });
+  assert.ok(a && b, 'os dois produtos continuam na base');
+  assert.equal(a.marketplace, 'mercadolivre');
+  assert.equal(b.marketplace, 'amazon');
+
+  await assert.rejects(importProductsFromExcel('/etc/passwd'), /pasta storage/);
+  await assert.rejects(importarPlanilhaEnviada('abc', 'virus.exe'), /\.xlsx/);
 });
 
 test.after(() => {
