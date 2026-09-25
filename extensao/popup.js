@@ -95,8 +95,14 @@ prepararConexao();
     if (!res.ok) throw new Error(`O painel respondeu ${res.status}`);
     const r = await res.json();
 
+    // O link de afiliado (meli.la, s.shopee) é gerado na hora pelo cookie:
+    // mostra se deu, para ninguém publicar achando que tem comissão.
+    const links = Object.entries(r.conversao || {}).map(([loja, c]) => (c.erro
+      ? `<br><span class="erro">⚠️ ${loja}: link de afiliado não gerado — ${c.erro}</span>`
+      : `<br><span class="fraco">🔗 ${loja}: ${c.convertidos || 0} link(s) de afiliado gerados</span>`)).join('');
+
     $('resultado').innerHTML = `<span class="ok"><b>✅ ${r.criados} novos</b> · `
-      + `${r.atualizados} já existiam (atualizados)</span>`;
+      + `${r.atualizados} já existiam (atualizados)</span>${links}`;
   } catch (e) {
     $('resultado').innerHTML = `<span class="erro">❌ ${e.message}</span>`
       + '<br><span class="fraco">O painel está aberto? (INICIAR.bat)</span>';

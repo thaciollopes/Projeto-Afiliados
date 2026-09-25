@@ -9,8 +9,7 @@ import { couponsForProduct } from '../../core/services/couponService.js';
 import { activePromotionFor } from '../../core/services/promotionService.js';
 import { calculatePricing } from '../../core/services/pricingService.js';
 import { generate } from '../../integrations/ai/index.js';
-import { converterProdutos } from '../../core/services/mercadoLivreLinkService.js';
-import { cookiesDaSessao } from '../../core/services/sessaoLojaService.js';
+import { converterImportados } from '../../core/services/linkPorCookieService.js';
 import { listMarketplaces } from '../../integrations/marketplaces/index.js';
 import { lerProgresso } from '../../core/services/progressoBuscaService.js';
 
@@ -60,14 +59,10 @@ produtosRouter.post('/importar', asyncHandler(async (req, res) => {
   const produtos = req.body.produtos || [];
   const resultado = importProducts(produtos, req.body.origem || 'busca');
 
-  // Produto do ML entra ja com link de afiliado, se houver sessao salva.
-  // Falha aqui nao desfaz a importacao: o produto fica com o aviso de comissao.
-  let conversao = null;
-  const temMl = produtos.some((p) => String(p.marketplace || '').startsWith('mercadolivre'));
-  if (temMl && cookiesDaSessao('mercadolivre')?.length) {
-    conversao = await converterProdutos().catch((e) => ({ erro: e.message }));
-  }
-  res.status(201).json({ ...resultado, conversao_ml: conversao });
+  // Produto do ML/Shopee entra ja com link de afiliado, se houver sessao
+  // salva. Falha aqui nao desfaz a importacao: fica o aviso de comissao.
+  const conversao = await converterImportados(produtos);
+  res.status(201).json({ ...resultado, conversao });
 }));
 
 produtosRouter.post('/recalcular-score', asyncHandler(async (_req, res) => {

@@ -94,6 +94,14 @@ export const savedSearchRepository = new BaseRepository({
   defaultSort: 'criado_em DESC',
 });
 
+export const linkCheckRepository = new BaseRepository({
+  table: 'link_checks',
+  prefix: 'lck',
+  jsonFields: ['ids_encontrados'],
+  boolFields: ['confere'],
+  defaultSort: 'verificado_em DESC',
+});
+
 export const logRepository = new BaseRepository({
   table: 'logs',
   prefix: 'log',

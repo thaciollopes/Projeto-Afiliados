@@ -47,7 +47,7 @@ Nada em `core/` conhece "WAHA" ou "AliExpress" pelo nome.
 ```bash
 npm start              # sobe (ou INICIAR.bat)
 npm run dev            # com --watch
-npm test               # 77 testes; o painel entra junto se o servidor estiver no ar
+npm test               # 95 testes; o painel entra junto se o servidor estiver no ar
 npm run seed           # só categorias e templates (idempotente)
 npm run health         # diagnóstico
 node scripts/reset.js --sim   # zera o banco (faz backup antes)
@@ -118,6 +118,9 @@ dinâmicos. Copie o padrão se precisar de outro teste com banco.
 | Tabela `settings` | PK é `chave`, não `id` — tem repositório próprio |
 | Teste que escreve em `settings` | usa o banco real: guarde e devolva o valor (um teste apagou o PKCE de uma autorização em andamento) |
 | Mercado Livre | busca da API fechada desde abr/2025; link de afiliado = `meli.la` via cookie (`mercadoLivreLinkService.js`) |
+| Shopee | link de afiliado = `s.shopee.com.br` via cookie do painel (`shopeeLinkService.js`); a conta é a do cookie, o ID em LOJAS só confere |
+| "Link curto = comissão" | falso: `verificacaoLinkService.js` abre o link e lê o ID no destino; ID de outra conta bloqueia a fila |
+| Reimportar produto | não pode trocar o link de afiliado gerado pelo link cru (`importProducts` preserva) |
 | Lojas | **sem API e sem loja demo** (pedido do dono). Catálogo em `marketplaces/lojas.js`; tag + cookie na tela LOJAS. Código antigo em `_arquivo/` |
 
 ---

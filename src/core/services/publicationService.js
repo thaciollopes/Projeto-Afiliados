@@ -14,8 +14,8 @@ import { renderPublication } from './templateService.js';
 import { activePromotionFor } from './promotionService.js';
 import { bestCouponFor, registerUse } from './couponService.js';
 import { exigeLinkDoPainel, lojaBase } from './affiliateLinkService.js';
-import { converterProdutos, jaEhLinkDeAfiliado } from './mercadoLivreLinkService.js';
-import { cookiesDaSessao } from './sessaoLojaService.js';
+import { podeConverter, converterProdutosDaLoja } from './linkPorCookieService.js';
+import { verificarProduto } from './verificacaoLinkService.js';
 import { getWhatsAppProvider } from '../../integrations/whatsapp/index.js';
 import { generate } from '../../integrations/ai/index.js';
 import { config } from '../../config/index.js';
@@ -41,17 +41,25 @@ export async function buildPublication({
   let produto = productRepository.findById(product_id);
   if (!produto) throw notFound('Produto');
 
-  // Ultima chance antes de publicar sem comissao: produto do ML sem meli.la e
-  // com sessao salva -> converte agora. Falhou, segue com o aviso no preview.
-  if (lojaBase(produto.marketplace) === 'mercadolivre'
-      && !jaEhLinkDeAfiliado(produto.url_final)
-      && cookiesDaSessao('mercadolivre')?.length) {
+  // Ultima chance antes de publicar sem comissao: produto do ML/Shopee sem
+  // link de afiliado e com sessao salva -> converte agora. Falhou, segue com
+  // o aviso no preview.
+  if (podeConverter(produto)) {
     try {
-      await converterProdutos({ ids: [produto.id] });
+      await converterProdutosDaLoja(produto.marketplace, { ids: [produto.id] });
       produto = productRepository.findById(product_id);
     } catch (err) {
-      log.warn(`Nao consegui converter o link do ML agora: ${err.message}`, { product_id });
+      log.warn(`Nao consegui gerar o link de afiliado agora: ${err.message}`, { product_id });
     }
+  }
+
+  // Link curto nao prova de quem e a comissao: abre e le o ID no destino.
+  // So vai a rede uma vez por link (o resultado fica guardado).
+  let conferencia = null;
+  try {
+    conferencia = await verificarProduto(produto);
+  } catch (err) {
+    log.warn(`Nao consegui conferir o link de afiliado: ${err.message}`, { product_id });
   }
 
   const promocao = promotion_id
@@ -88,7 +96,9 @@ export async function buildPublication({
     template, product: produtoParaTexto, pricing: precos, promotion: promocao, coupon: precos.cupom,
   });
 
-  const { bloqueios, avisos } = validatePublication({ produto, precos, promocao, cupom, mensagem });
+  const { bloqueios, avisos } = validatePublication({
+    produto, precos, promocao, cupom, mensagem, conferencia,
+  });
 
   return {
     mensagem,
@@ -101,12 +111,15 @@ export async function buildPublication({
     bloqueios,
     avisos,
     ia,
+    conferencia_link: conferencia,
     pode_publicar: bloqueios.length === 0,
   };
 }
 
 /** O que impede a publicacao (bloqueio) e o que so merece aviso. */
-export function validatePublication({ produto, precos, promocao, cupom, mensagem }) {
+export function validatePublication({
+  produto, precos, promocao, cupom, mensagem, conferencia = null,
+}) {
   const bloqueios = [];
   const avisos = [];
 
@@ -127,13 +140,20 @@ export function validatePublication({ produto, precos, promocao, cupom, mensagem
 
   // O pior erro silencioso do ramo: publicar bonito e nao ganhar comissao.
   const exige = exigeLinkDoPainel(produto.marketplace);
-  const linkTemRastreio = /\/sec\/|meli\.la\/|s\.shopee\.|shope\.ee|amzn\.to|s\.click\.aliexpress\./i
+  const linkTemRastreio = /\/sec\/|meli\.la\/|s\.shopee\.|shope\.ee|shp\.ee|amzn\.to|s\.click\.aliexpress\./i
     .test(produto.url_final || '');
 
   if (exige && !linkTemRastreio) {
     avisos.push(`SEM COMISSAO: ${exige} Cole o link gerado no painel no campo "Link de afiliado" do produto.`);
   } else if (!produto.url_afiliado) {
     avisos.push('Sem link de afiliado: usando o link original (a venda nao sera atribuida a voce)');
+  }
+
+  // Comissao para outra conta e pior que sem comissao: bloqueia.
+  if (conferencia?.confere === false) {
+    bloqueios.push(`Link de afiliado de OUTRA conta: ${conferencia.motivo}`);
+  } else if (conferencia?.confere === null && linkTemRastreio) {
+    avisos.push(`ID de afiliado nao conferido: ${conferencia.motivo}`);
   }
 
   return { bloqueios, avisos };

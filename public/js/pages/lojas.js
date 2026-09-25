@@ -8,7 +8,7 @@ import { el, escapar, tentar, ok, erro, etiqueta, confirmar } from '../ui.js';
  */
 
 const COMO_VIRA_LINK = {
-  cookie: 'O sistema gera o seu link curto (meli.la) usando o cookie.',
+  cookie: 'O sistema gera o seu link curto (meli.la / s.shopee.com.br) usando o cookie.',
   tag: 'A sua tag entra no link de cada produto automaticamente.',
   painel: 'Só o link gerado no painel da loja paga comissão — cole-o no produto.',
 };
@@ -66,33 +66,73 @@ function blocoTag(loja) {
     </div>`;
 }
 
-function blocoMercadoLivre() {
+const EXEMPLO_LINK = {
+  mercadolivre: { curto: 'meli.la', produto: 'https://www.mercadolivre.com.br/...' },
+  shopee: { curto: 's.shopee.com.br', produto: 'https://shopee.com.br/...-i.123.456' },
+};
+
+function blocoLinkCookie(loja, passo) {
+  const ex = EXEMPLO_LINK[loja.id] || { curto: 'link curto', produto: 'https://...' };
   return `
     <div class="loja-passo">
-      <strong>3. Testar o link de afiliado (meli.la)</strong>
+      <strong>${passo}. Gerar o link de afiliado (${escapar(ex.curto)})</strong>
       <p class="pequeno texto-fraco" style="margin:4px 0 8px">
-        Cole um produto do Mercado Livre: se sair um link meli.la, está tudo certo.
-        Produtos do ML que entram no sistema são convertidos sozinhos.
+        Cole um link de produto (${escapar(loja.nome)}): o sistema gera o link e já confere se o ID
+        de afiliado no destino é o seu. Produtos que entram no sistema são convertidos sozinhos.
       </p>
       <div class="linha">
-        <input data-link-teste placeholder="https://www.mercadolivre.com.br/..." style="flex:1;min-width:200px">
-        <button class="btn btn-pequeno" data-converter-um>Converter</button>
-        <button class="btn btn-pequeno" data-converter-todos>Converter todos os produtos</button>
+        <input data-link-teste="${loja.id}" placeholder="${escapar(ex.produto)}" style="flex:1;min-width:200px">
+        <button class="btn btn-pequeno" data-converter-um="${loja.id}">Converter</button>
+        <button class="btn btn-pequeno" data-converter-todos="${loja.id}">Converter todos os produtos</button>
       </div>
-      <div data-saida-link class="pequeno" style="margin-top:8px"></div>
+      <div data-saida-link="${loja.id}" class="pequeno" style="margin-top:8px"></div>
     </div>`;
 }
 
-function blocoBusca(loja) {
+function blocoConferir(loja, passo) {
   return `
     <div class="loja-passo">
-      <strong>3. Testar a busca</strong>
+      <strong>${passo}. Conferir se o ID de afiliado é o seu</strong>
+      <p class="pequeno texto-fraco" style="margin:4px 0 8px">
+        Abre o link como o cliente abriria e lê o ID que chega na loja. Link de outra conta
+        fica bloqueado na fila.
+      </p>
+      <div class="linha">
+        <input data-link-conferir="${loja.id}" placeholder="cole um link já publicado" style="flex:1;min-width:200px">
+        <button class="btn btn-pequeno" data-conferir-um="${loja.id}">Conferir link</button>
+        <button class="btn btn-pequeno" data-conferir-todos="${loja.id}">Conferir os produtos</button>
+      </div>
+      <div data-saida-conferir="${loja.id}" class="pequeno" style="margin-top:8px"></div>
+    </div>`;
+}
+
+function textoConferencia(c) {
+  if (!c) return '';
+  if (c.confere === true) return `<span style="color:var(--ok)">✅ ${escapar(c.motivo)}</span>`;
+  if (c.confere === false) return `<span style="color:var(--erro)">❌ ${escapar(c.motivo)}</span>`;
+  return `<span style="color:var(--alerta)">⚠️ ${escapar(c.motivo)}</span>`;
+}
+
+function blocoBusca(loja, passo) {
+  return `
+    <div class="loja-passo">
+      <strong>${passo}. Testar a busca</strong>
       <p class="pequeno texto-fraco" style="margin:4px 0 8px">
         O sistema procura produtos aqui sozinho. Buscas seguidas demais fazem a loja bloquear
         por alguns minutos — o sistema já espera entre uma e outra.
       </p>
       <button class="btn btn-pequeno" data-testar="${loja.id}">Buscar "perfume feminino"</button>
     </div>`;
+}
+
+/** Passos depois de tag e cookie: numerados conforme o que a loja tem. */
+function passosExtras(loja) {
+  const blocos = [
+    loja.converte_por_cookie && blocoLinkCookie,
+    loja.busca && blocoBusca,
+    loja.conferivel && blocoConferir,
+  ].filter(Boolean);
+  return blocos.map((bloco, i) => bloco(loja, i + 3)).join('');
 }
 
 function cartaoLoja(loja) {
@@ -119,8 +159,7 @@ function cartaoLoja(loja) {
         ${blocoTag(loja)}
         ${blocoCookie(loja)}
       </div>
-      ${loja.id === 'mercadolivre' ? blocoMercadoLivre() : ''}
-      ${loja.busca ? blocoBusca(loja) : ''}
+      ${passosExtras(loja)}
       <div data-saida="${loja.id}" class="pequeno" style="margin-top:8px"></div>
     </div>`;
 }
@@ -191,6 +230,7 @@ export async function renderLojas() {
       const r = await tentar(() => api.put(`/marketplaces/${d.salvarTag}/tag`, { tag }),
         tag ? 'Tag salva' : 'Tag removida');
       if (r?.reaplicados) ok(`${r.reaplicados} produto(s) com o link atualizado`);
+      if (r?.links_para_refazer) ok(`${r.links_para_refazer} link(s) meli.la serão gerados de novo com a tag nova`);
       if (r) recarregar();
       return;
     }
@@ -223,29 +263,58 @@ export async function renderLojas() {
       return;
     }
 
-    if (d.converterUm !== undefined || d.converterTodos !== undefined) {
-      const saida = tela.querySelector('[data-saida-link]');
+    if (d.converterUm || d.converterTodos) {
+      const lojaId = d.converterUm || d.converterTodos;
+      const saida = tela.querySelector(`[data-saida-link="${lojaId}"]`);
       saida.innerHTML = '<span class="texto-fraco">Convertendo…</span>';
 
-      if (d.converterUm !== undefined) {
-        const url = tela.querySelector('[data-link-teste]').value.trim();
-        if (!url) { saida.innerHTML = ''; erro('Cole um link de produto do Mercado Livre.'); return; }
-        const r = await api.post('/marketplaces/mercadolivre/converter-link', { url })
+      if (d.converterUm) {
+        const url = tela.querySelector(`[data-link-teste="${lojaId}"]`).value.trim();
+        if (!url) { saida.innerHTML = ''; erro('Cole um link de produto.'); return; }
+        const r = await api.post(`/marketplaces/${lojaId}/converter-link`, { url })
           .catch((e) => ({ ok: false, erro: e.message }));
+        const quem = r.tag ? ` · tag ${escapar(r.tag)}` : r.affiliate_id ? ` · ID ${escapar(r.affiliate_id)}` : '';
         saida.innerHTML = r.ok
           ? `<span style="color:var(--ok)">✅ <a href="${escapar(r.link)}" target="_blank" rel="noopener">${escapar(r.link)}</a></span>
-             <span class="texto-fraco"> · tag ${escapar(r.tag)}</span>`
+             <span class="texto-fraco">${quem}</span><br>${textoConferencia(r.conferencia)}`
           : `<span style="color:var(--erro)">❌ ${escapar(r.erro)}</span>`;
         return;
       }
 
-      const r = await api.post('/marketplaces/mercadolivre/converter', {}).catch((e) => ({ erro: e.message }));
+      const r = await api.post(`/marketplaces/${lojaId}/converter`, {}).catch((e) => ({ erro: e.message }));
       saida.innerHTML = r.erro
         ? `<span style="color:var(--erro)">❌ ${escapar(r.erro)}</span>`
         : r.mensagem
           ? `<span class="texto-fraco">${escapar(r.mensagem)}</span>`
           : `<span style="color:var(--ok)">✅ ${r.convertidos} convertidos</span>`
             + (r.falhas ? `<span class="texto-fraco"> · ${r.falhas} não elegíveis</span>` : '');
+      return;
+    }
+
+    if (d.conferirUm || d.conferirTodos) {
+      const lojaId = d.conferirUm || d.conferirTodos;
+      const saida = tela.querySelector(`[data-saida-conferir="${lojaId}"]`);
+
+      if (d.conferirUm) {
+        const url = tela.querySelector(`[data-link-conferir="${lojaId}"]`).value.trim();
+        if (!url) { erro('Cole um link.'); return; }
+        saida.innerHTML = '<span class="texto-fraco">Abrindo o link…</span>';
+        const r = await api.post(`/marketplaces/${lojaId}/verificar-link`, { url })
+          .catch((e) => ({ confere: null, motivo: e.message }));
+        saida.innerHTML = textoConferencia(r)
+          + (r.destino ? `<br><span class="texto-fraco">destino: ${escapar(String(r.destino).slice(0, 120))}</span>` : '');
+        return;
+      }
+
+      saida.innerHTML = '<span class="texto-fraco">Conferindo (1 link por segundo)…</span>';
+      const r = await api.post(`/marketplaces/${lojaId}/verificar`, { limite: 30 })
+        .catch((e) => ({ erro: e.message }));
+      if (r.erro) { saida.innerHTML = `<span style="color:var(--erro)">❌ ${escapar(r.erro)}</span>`; return; }
+      saida.innerHTML = `<span style="color:var(--ok)">✅ ${r.confere} com o seu ID</span>`
+        + (r.outra_conta ? ` · <span style="color:var(--erro)">❌ ${r.outra_conta} de outra conta</span>` : '')
+        + (r.nao_conferido ? ` · <span style="color:var(--alerta)">⚠️ ${r.nao_conferido} não conferidos</span>` : '')
+        + ` <span class="texto-fraco">de ${r.total}</span>`
+        + r.problemas.slice(0, 8).map((p) => `<br><span class="texto-fraco">• ${escapar(String(p.produto).slice(0, 40))}: ${escapar(p.motivo)}</span>`).join('');
     }
   });
 

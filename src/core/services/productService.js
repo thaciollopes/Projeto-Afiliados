@@ -147,8 +147,13 @@ export function importProducts(produtos = [], origem = 'busca') {
       registrarMudancaPreco(existente, Number(bruto.preco_atual), origem);
     }
 
+    // A busca devolve o link cru; o link de afiliado ja gerado (meli.la,
+    // s.shopee) nao pode ser trocado por ele a cada reimportacao — era assim
+    // que o post saia sem comissao depois de a oferta aparecer de novo.
+    const mesmoProduto = existente && semRastreio(existente.url_original) === semRastreio(bruto.url_original);
     const dados = derive({
       ...bruto,
+      url_afiliado: bruto.url_afiliado || (mesmoProduto ? existente.url_afiliado : null) || null,
       data_atualizacao: nowIso(),
       data_coleta: existente?.data_coleta || bruto.data_coleta || nowIso(),
       origem,
@@ -167,6 +172,11 @@ export function importProducts(produtos = [], origem = 'busca') {
 
   log.info(`Importacao concluida: ${criados} novos, ${atualizados} atualizados`, { origem });
   return { criados, atualizados, total: criados + atualizados };
+}
+
+/** A mesma pagina de produto, ignorando a query (sp_atk, utm... mudam a cada visita). */
+function semRastreio(url) {
+  return String(url || '').split(/[?#]/)[0].replace(/\/+$/, '').toLowerCase();
 }
 
 /** Recoleta o produto no marketplace de origem e atualiza preco/disponibilidade. */

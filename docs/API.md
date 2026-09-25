@@ -54,6 +54,18 @@ com status 400, 401, 404, 409 ou 500.
 | POST | `/produtos/:id/melhorar-ia` | sugere texto novo (não salva) |
 | POST | `/produtos/recalcular-score` | recalcula o score de todos |
 
+### Lojas e link de afiliado
+
+| Método | Rota | O que faz |
+|---|---|---|
+| GET | `/marketplaces` | lojas, tag, sessão (sem valor de cookie) |
+| PUT | `/marketplaces/:loja/sessao` | salva o cookie (`{ cookies }`) |
+| PUT | `/marketplaces/:loja/tag` | salva a tag/ID e reaplica nos produtos |
+| POST | `/marketplaces/:loja/converter-link` | gera o link de afiliado de um link (`mercadolivre`, `shopee`) e confere o ID |
+| POST | `/marketplaces/:loja/converter` | gera o link dos produtos da loja que ainda não têm |
+| POST | `/marketplaces/:loja/verificar-link` | abre um link e diz se o ID no destino é o seu (`confere`: true/false/null) |
+| POST | `/marketplaces/:loja/verificar` | confere os produtos ativos da loja (`limite`, `forcar`) |
+
 **Buscar:**
 ```http
 POST /api/produtos/buscar

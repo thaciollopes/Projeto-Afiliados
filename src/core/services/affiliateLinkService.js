@@ -29,6 +29,7 @@ export function lojaBase(marketplace) {
 const JA_TEM_RASTREIO = [
   /s\.shopee\./i,
   /shope\.ee/i,
+  /shp\.ee\//i,
   /amzn\.to/i,
   /mercadolivre\.com\/sec\//i,
   /meli\.la\//i,
@@ -60,7 +61,8 @@ const PARAMETRO_PADRAO = {
 const EXIGEM_LINK_DO_PAINEL = {
   mercadolivre: 'O Mercado Livre só paga comissão no link meli.la gerado pelo painel. '
     + 'Cole o cookie em LOJAS → Mercado Livre.',
-  shopee: 'A Shopee só atribui comissão ao link gerado no painel/API (s.shopee.com.br/...).',
+  shopee: 'A Shopee só paga comissão no link s.shopee.com.br gerado pelo painel. '
+    + 'Cole o cookie em LOJAS → Shopee.',
 };
 
 /**

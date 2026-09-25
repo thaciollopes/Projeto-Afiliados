@@ -8,7 +8,8 @@
  *                (Amazon: sim. Mercado Livre: só pelas páginas de ofertas — a
  *                busca comum cai em captcha. Shopee/Magalu: pela extensão.)
  *   linkAfiliado como o link vira o SEU link:
- *                'cookie' -> o sistema gera pela sua sessão (ML: meli.la)
+ *                'cookie' -> o sistema gera pela sua sessão (ML: meli.la,
+ *                            Shopee: s.shopee.com.br)
  *                'tag'    -> a tag entra como parâmetro na URL (Amazon: ?tag=)
  *                'painel' -> só o link gerado no painel da loja paga comissão
  */
@@ -58,17 +59,18 @@ export const LOJAS = {
     id: 'shopee',
     nome: 'Shopee',
     site: 'https://shopee.com.br',
-    painel: 'https://affiliate.shopee.com.br',
+    painel: 'https://affiliate.shopee.com.br/offer/custom_link',
     dominio: 'shopee.com.br',
     busca: false,
-    linkAfiliado: 'painel',
+    // Mesmo esquema do ML: o link s.shopee.com.br sai da sua sessão no painel.
+    linkAfiliado: 'cookie',
     tag: {
       rotulo: 'ID de afiliado',
-      exemplo: 'seu ID no painel Shopee',
+      exemplo: 'o número do seu ID no painel (serve para conferir os links)',
       obrigatoria: false,
     },
-    dicaCookie: 'Exporte estando logado no painel de afiliados da Shopee.',
-    comoEntramProdutos: 'Pela extensão. O link com comissão é o gerado no painel da Shopee (s.shopee.com.br) — cole no campo "Link de afiliado" do produto.',
+    dicaCookie: 'Exporte o cookie estando logado em affiliate.shopee.com.br (página "Link personalizado") — o "SPC_EC" precisa vir junto.',
+    comoEntramProdutos: 'Pela extensão. O link vira s.shopee.com.br sozinho, pelo seu cookie do painel de afiliados.',
   },
 
   magalu: {

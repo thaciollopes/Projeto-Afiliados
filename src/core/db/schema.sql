@@ -284,3 +284,20 @@ CREATE TABLE IF NOT EXISTS alerts (
   criado_em     TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_alerts_lido ON alerts(lido);
+
+-- Conferência do link de afiliado: o ID que aparece no destino do link é o seu?
+-- Uma linha por URL publicada; `id_esperado` guarda contra o quê foi conferido,
+-- para refazer a conferência quando você troca a tag.
+CREATE TABLE IF NOT EXISTS link_checks (
+  id            TEXT PRIMARY KEY,
+  url           TEXT NOT NULL UNIQUE,
+  loja          TEXT NOT NULL,
+  confere       INTEGER,
+  id_esperado   TEXT,
+  ids_encontrados TEXT,
+  destino       TEXT,
+  motivo        TEXT,
+  verificado_em TEXT NOT NULL,
+  criado_em     TEXT NOT NULL,
+  atualizado_em TEXT NOT NULL
+);
