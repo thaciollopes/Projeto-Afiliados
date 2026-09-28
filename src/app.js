@@ -7,6 +7,15 @@ import { getDb } from './core/db/index.js';
 import { logRepository } from './core/repositories/index.js';
 import { logger, setLogSink } from './core/utils/logger.js';
 
+/** O painel aberto pelo IP da rede ou por um domínio chama a API da mesma origem. */
+function mesmaOrigem(origem, host) {
+  try {
+    return Boolean(origem && host) && new URL(origem).host === host;
+  } catch {
+    return false;
+  }
+}
+
 export function createApp() {
   getDb();
 
@@ -23,7 +32,9 @@ export function createApp() {
 
   const app = express();
   app.disable('x-powered-by');
-  app.use(express.json({ limit: '10mb' }));
+  // Corpo bruto guardado: a assinatura (HMAC) do webhook da WAHA e calculada
+  // sobre os bytes exatos, nao sobre o JSON re-serializado.
+  app.use(express.json({ limit: '10mb', verify: (req, _res, buf) => { req.corpoBruto = buf; } }));
   app.use(express.urlencoded({ extended: true }));
   app.use(requestLogger);
 
@@ -34,7 +45,8 @@ export function createApp() {
     const origem = req.get('origin') || '';
     const permitida = /^chrome-extension:\/\//.test(origem)
       || /^moz-extension:\/\//.test(origem)
-      || /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origem);
+      || /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origem)
+      || mesmaOrigem(origem, req.get('host'));
 
     if (permitida) {
       res.setHeader('Access-Control-Allow-Origin', origem);
@@ -43,6 +55,15 @@ export function createApp() {
       res.setHeader('Vary', 'Origin');
     }
     if (req.method === 'OPTIONS') return res.sendStatus(permitida ? 204 : 403);
+
+    // CSRF: sem APP_TOKEN (o padrão local), qualquer site aberto no navegador
+    // podia mandar um formulário para localhost:3010 — importar produto com o
+    // link de afiliado de OUTRA pessoa, restaurar backup velho. O navegador
+    // sempre manda Origin nesses casos: origem estranha não altera nada.
+    // (n8n, curl e scripts não mandam Origin e seguem passando.)
+    if (origem && !permitida && !['GET', 'HEAD'].includes(req.method)) {
+      return res.status(403).json({ erro: 'Origem nao permitida', codigo: 'ORIGEM_NAO_PERMITIDA' });
+    }
     return next();
   });
 

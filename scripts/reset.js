@@ -23,4 +23,4 @@ if (fs.existsSync(config.db.file)) {
   }
 }
 
-console.log('  Banco apagado. Rode "npm run seed" para recriar os dados de exemplo.');
+console.log('  Banco apagado. Rode "npm run seed" para recriar categorias e templates.');

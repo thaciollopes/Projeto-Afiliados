@@ -87,3 +87,15 @@ test('título de publicação tem prioridade sobre o original', () => {
   });
   assert.equal(contexto.titulo, 'Perfume floral 100ml');
 });
+
+test('selo de menor preço aparece só quando o serviço manda; senão a linha some', () => {
+  const corpo = '{titulo}\n📉 {menor_preco}\n{link}';
+  const com = renderTemplate(corpo, buildContext({
+    product: { titulo_original: 'Fone', url_final: 'https://x' },
+    extras: { menor_preco: 'Menor preço que registramos em 30 dias' },
+  }));
+  assert.match(com, /📉 Menor preço que registramos em 30 dias/);
+
+  const sem = renderTemplate(corpo, buildContext({ product: { titulo_original: 'Fone', url_final: 'https://x' } }));
+  assert.doesNotMatch(sem, /📉/);
+});

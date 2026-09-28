@@ -13,9 +13,9 @@ import {
 import {
   listPromotions, getPromotion, createPromotion, updatePromotion, deletePromotion, expandPromotion,
 } from '../../core/services/promotionService.js';
-import { renderTemplate, buildContext, VARIAVEIS_DISPONIVEIS } from '../../core/services/templateService.js';
-import { calculatePricing } from '../../core/services/pricingService.js';
-import { productRepository, couponRepository } from '../../core/repositories/index.js';
+import { renderTemplate, VARIAVEIS_DISPONIVEIS } from '../../core/services/templateService.js';
+import { previaDoTemplate } from '../../core/services/publicationService.js';
+import { productRepository } from '../../core/repositories/index.js';
 import { getMarketplace, listMarketplaces } from '../../integrations/marketplaces/index.js';
 import { slugify } from '../../core/utils/id.js';
 import { mask } from '../../config/index.js';
@@ -148,21 +148,12 @@ templatesRouter.delete('/:id', asyncHandler(async (req, res) => {
 
 /** Preview ao vivo do editor de post. */
 templatesRouter.post('/preview', asyncHandler(async (req, res) => {
-  const { corpo, product_id, coupon_id } = req.body;
+  const { corpo, product_id, coupon_id } = req.body || {};
   if (!corpo) throw badRequest('corpo e obrigatorio');
 
-  const produto = product_id
-    ? productRepository.findById(product_id)
-    : productRepository.findAll({ limit: 1 }).rows[0];
-
-  if (!produto) {
-    return res.json({ mensagem: renderTemplate(corpo, exemploContexto()), exemplo: true });
-  }
-
-  const cupom = coupon_id ? couponRepository.findById(coupon_id) : null;
-  const precos = calculatePricing({ product: produto, coupon: cupom });
-  const contexto = buildContext({ product: produto, pricing: precos, coupon: cupom });
-  res.json({ mensagem: renderTemplate(corpo, contexto), contexto, precos, produto: produto.titulo_original });
+  const previa = previaDoTemplate(corpo, { product_id, coupon_id });
+  if (!previa) return res.json({ mensagem: renderTemplate(corpo, exemploContexto()), exemplo: true });
+  res.json(previa);
 }));
 
 function desmarcarPadrao() {
@@ -179,6 +170,7 @@ function exemploContexto() {
     cupom: 'EXEMPLO20', desconto_cupom: 'R$ 20,00', avaliacao: '4.8', vendas: '1200',
     link: 'https://exemplo.com/produto', imagem: '', marketplace: 'Amazon',
     categoria: 'Perfumaria', validade: '31/12/2026 23:59', frete: 'Frete gratis',
+    menor_preco: 'Menor preço que registramos em 30 dias',
   };
 }
 

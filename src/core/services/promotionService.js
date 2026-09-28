@@ -56,8 +56,24 @@ export function createPromotion(data) {
 }
 
 export function updatePromotion(id, patch) {
-  getPromotion(id);
-  return promotionRepository.update(id, patch);
+  const atual = getPromotion(id);
+  const mexeuNoPreco = ['preco_normal', 'preco_promocional'].some((c) => patch[c] !== undefined);
+  if (!mexeuNoPreco) return promotionRepository.update(id, patch);
+
+  // Mesma checagem do cadastro — e o desconto gravado acompanha o preço
+  // novo (antes ficava o desconto antigo, e a tela mostrava número errado).
+  const precoNormal = numero(patch.preco_normal !== undefined ? patch.preco_normal : atual.preco_normal);
+  const precoPromo = numero(patch.preco_promocional !== undefined ? patch.preco_promocional : atual.preco_promocional);
+  if (precoNormal !== null && precoPromo !== null && precoPromo > precoNormal) {
+    throw badRequest('preco_promocional nao pode ser maior que preco_normal');
+  }
+  return promotionRepository.update(id, {
+    ...patch,
+    preco_normal: precoNormal,
+    preco_promocional: precoPromo,
+    desconto_percentual: precoNormal && precoPromo ? percentOff(precoNormal, precoPromo) : null,
+    desconto_valor: precoNormal && precoPromo ? round2(precoNormal - precoPromo) : null,
+  });
 }
 
 export function deletePromotion(id) {
@@ -84,7 +100,7 @@ export function activePromotionFor(productId, reference = new Date()) {
 
 /** Worker: expira o que venceu e avisa o que esta perto de vencer. */
 export function expirePromotions(reference = new Date()) {
-  const ativas = promotionRepository.list({ filters: { status: 'ativa' }, limit: 1000 });
+  const ativas = promotionRepository.listAll({ filters: { status: 'ativa' } });
   let expiradas = 0;
   let alertas = 0;
 

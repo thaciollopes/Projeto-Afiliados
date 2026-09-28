@@ -38,7 +38,10 @@ function main() {
   let novosTemplates = 0;
   for (const template of TEMPLATES_PADRAO) {
     if (!templateRepository.findOne({ nome: template.nome })) {
-      templateRepository.create({ ativo: true, padrao: Boolean(template.padrao), ...template });
+      // Se você já escolheu um padrão (ou renomeou o "Oferta"), o que volta
+      // pelo seed não vira um segundo padrão.
+      const jaTemPadrao = Boolean(templateRepository.findOne({ padrao: 1 }));
+      templateRepository.create({ ativo: true, ...template, padrao: Boolean(template.padrao) && !jaTemPadrao });
       novosTemplates += 1;
     }
   }
@@ -49,7 +52,7 @@ function main() {
     settingRepository.set('score_weights', { vendas: 0.3, avaliacao: 0.2, desconto: 0.3, novidade: 0.1, preco: 0.1 });
   }
 
-  console.log('\nPronto. Coloque suas lojas em PRODUTOS → LOJAS.\n');
+  console.log('\nPronto. Coloque suas lojas em LOJAS → Minhas lojas (o passo a passo está no menu Manual).\n');
 }
 
 try {

@@ -71,10 +71,20 @@ export function parseCookies(entrada) {
   if (!uteis.length) throw badRequest('Não encontrei cookies de sessão válidos no que foi colado.');
 
   const dominios = [...new Set(uteis.map((c) => c.domain).filter(Boolean))];
-  const validades = uteis.map((c) => c.expires).filter(Boolean);
-  const expiraEm = validades.length ? new Date(Math.min(...validades) * 1000).toISOString() : null;
+  return { cookies: uteis, dominios, expira_em: validadeDaSessao(uteis) };
+}
 
-  return { cookies: uteis, dominios, expira_em: expiraEm };
+/**
+ * Quando a sessao vence. Nao e o cookie que vence primeiro: a exportacao traz
+ * cookies de telemetria que duram minutos (o `_dd_s` dura 15), e a tela
+ * marcava "cookie expirado" logo depois de salvar. Vale o cookie de sessao
+ * (os `obrigatorios` da loja) ou, sem ele, o primeiro que dura mais de 1 dia.
+ */
+function validadeDaSessao(cookies, obrigatorios = [], agora = Date.now()) {
+  const doLogin = cookies.filter((c) => obrigatorios.includes(c.name)).map((c) => c.expires).filter(Boolean);
+  const duradouros = cookies.map((c) => c.expires).filter((e) => e && e * 1000 - agora > 86400000);
+  const validades = doLogin.length ? doLogin : duradouros;
+  return validades.length ? new Date(Math.min(...validades) * 1000).toISOString() : null;
 }
 
 function normalizarSameSite(valor) {
@@ -83,8 +93,19 @@ function normalizarSameSite(valor) {
   return mapa[chave] ?? undefined;
 }
 
-export function salvarSessao(loja, entrada) {
-  const { cookies, dominios, expira_em: expiraEm } = parseCookies(entrada);
+/**
+ * @param {string[]} [obrigatorios] cookies sem os quais a loja nao aceita a
+ *   sessao (ML: _csrf; Shopee: SPC_EC). Faltou -> recusa agora, e nao na hora
+ *   de gerar o link.
+ */
+export function salvarSessao(loja, entrada, { obrigatorios = [] } = {}) {
+  const { cookies, dominios } = parseCookies(entrada);
+  const faltam = obrigatorios.filter((nome) => !cookies.some((c) => c.name === nome));
+  if (faltam.length) {
+    throw badRequest(`Faltou o cookie ${faltam.map((n) => `"${n}"`).join(', ')}. `
+      + 'Exporte de novo com o Cookie Editor, logado na pagina do painel de afiliados da loja.');
+  }
+  const expiraEm = validadeDaSessao(cookies, obrigatorios);
 
   settingRepository.set(`${PREFIXO}${loja}`, {
     cookies,

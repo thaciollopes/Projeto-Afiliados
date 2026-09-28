@@ -59,6 +59,20 @@ test('promoção vencida não é usada como preço', () => {
 
   assert.ok(r.motivos.includes('promocao_expirada'));
   assert.equal(r.tem_promocao, false);
+  assert.equal(r.preco_final, 159.9, 'o preço é o do produto, não o da promoção vencida');
+});
+
+test('promoção pausada ou que ainda não começou também não mexe no preço', () => {
+  const pausada = { preco_normal: 299.9, preco_promocional: 99.9, status: 'pausada', frete_gratis: true, data_fim: emDias(5) };
+  const futura = { preco_normal: 299.9, preco_promocional: 99.9, status: 'ativa', data_inicio: emDias(2), data_fim: emDias(9) };
+
+  for (const promocao of [pausada, futura]) {
+    const r = calculatePricing({ product: produto, promotion: promocao });
+    assert.equal(r.preco_base, 159.9);
+    assert.equal(r.preco_final, 159.9);
+    assert.equal(r.preco_normal, 199.9, 'o "de" também não vem da promoção inválida');
+    assert.equal(r.frete_gratis, false);
+  }
 });
 
 test('cupom percentual respeita o teto de desconto', () => {

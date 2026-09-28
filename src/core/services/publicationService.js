@@ -13,13 +13,17 @@ import { calculatePricing } from './pricingService.js';
 import { renderPublication } from './templateService.js';
 import { activePromotionFor } from './promotionService.js';
 import { bestCouponFor, registerUse } from './couponService.js';
-import { exigeLinkDoPainel, lojaBase } from './affiliateLinkService.js';
-import { converterProdutos, jaEhLinkDeAfiliado } from './mercadoLivreLinkService.js';
-import { cookiesDaSessao } from './sessaoLojaService.js';
-import { getWhatsAppProvider } from '../../integrations/whatsapp/index.js';
+import { exigeLinkDoPainel, ehLinkDeAfiliadoCurto } from './affiliateLinkService.js';
+import { podeConverter, converterProdutosDaLoja } from './linkPorCookieService.js';
+import { verificarProduto } from './verificacaoLinkService.js';
+import { seloMenorPreco } from './historicoPrecoService.js';
+import { linkParaCanal, subIdDoCanal } from './linkPorCanalService.js';
+import { mensageiroDo, precisaPausaAntiBloqueio } from '../../integrations/mensageiros.js';
 import { generate } from '../../integrations/ai/index.js';
 import { config } from '../../config/index.js';
-import { nowIso, localHHMM, hhmmToMinutes, localDay, addMinutes } from '../utils/dates.js';
+import {
+  nowIso, addMinutes, dentroDoHorario, inicioDoDiaIso,
+} from '../utils/dates.js';
 import { logger } from '../utils/logger.js';
 import { notFound, badRequest } from '../utils/errors.js';
 
@@ -37,32 +41,45 @@ export const MAX_TENTATIVAS = RETRY_MINUTOS.length;
  */
 export async function buildPublication({
   product_id, promotion_id, coupon_id, template_id, usar_ia = false, reference = new Date(),
+  channel_id = null,
 } = {}) {
   let produto = productRepository.findById(product_id);
   if (!produto) throw notFound('Produto');
 
-  // Ultima chance antes de publicar sem comissao: produto do ML sem meli.la e
-  // com sessao salva -> converte agora. Falhou, segue com o aviso no preview.
-  if (lojaBase(produto.marketplace) === 'mercadolivre'
-      && !jaEhLinkDeAfiliado(produto.url_final)
-      && cookiesDaSessao('mercadolivre')?.length) {
+  // Ultima chance antes de publicar sem comissao: produto do ML/Shopee sem
+  // link de afiliado e com sessao salva -> converte agora. Falhou, segue com
+  // o aviso no preview.
+  if (podeConverter(produto)) {
     try {
-      await converterProdutos({ ids: [produto.id] });
+      await converterProdutosDaLoja(produto.marketplace, { ids: [produto.id] });
       produto = productRepository.findById(product_id);
     } catch (err) {
-      log.warn(`Nao consegui converter o link do ML agora: ${err.message}`, { product_id });
+      log.warn(`Nao consegui gerar o link de afiliado agora: ${err.message}`, { product_id });
     }
   }
 
-  const promocao = promotion_id
-    ? promotionRepository.findById(promotion_id)
-    : activePromotionFor(produto.id, reference);
+  // Link curto nao prova de quem e a comissao: abre e le o ID no destino.
+  // So vai a rede uma vez por link (o resultado fica guardado).
+  let conferencia = null;
+  try {
+    conferencia = await verificarProduto(produto);
+  } catch (err) {
+    log.warn(`Nao consegui conferir o link de afiliado: ${err.message}`, { product_id });
+  }
 
-  const cupom = coupon_id
-    ? couponRepository.findById(coupon_id)
-    : (promocao?.coupon_id ? couponRepository.findById(promocao.coupon_id) : bestCouponFor(produto, reference));
+  // Com o grupo conhecido, a Shopee ganha um link com o sub ID do grupo (so
+  // neste post; o produto continua com o link normal).
+  let linkCanal = null;
+  if (channel_id) {
+    const canal = channelRepository.findById(channel_id);
+    const link = await linkParaCanal(produto, canal);
+    if (link) {
+      linkCanal = { link, sub_id: subIdDoCanal(canal) };
+      produto = { ...produto, url_afiliado: link, url_final: link };
+    }
+  }
 
-  const precos = calculatePricing({ product: produto, promotion: promocao, coupon: cupom, reference });
+  const { promocao, cupom, precos } = precosDaOferta(produto, { promotion_id, coupon_id, reference });
 
   const template = template_id
     ? templateRepository.findById(template_id)
@@ -84,11 +101,19 @@ export async function buildPublication({
     }
   }
 
+  const menorPreco = seloMenorPreco(produto, { reference });
   const { mensagem } = renderPublication({
-    template, product: produtoParaTexto, pricing: precos, promotion: promocao, coupon: precos.cupom,
+    template,
+    product: produtoParaTexto,
+    pricing: precos,
+    promotion: promocao,
+    coupon: precos.cupom,
+    extras: { menor_preco: menorPreco?.selo },
   });
 
-  const { bloqueios, avisos } = validatePublication({ produto, precos, promocao, cupom, mensagem });
+  const { bloqueios, avisos } = validatePublication({
+    produto, precos, promocao, cupom, mensagem, conferencia,
+  });
 
   return {
     mensagem,
@@ -101,19 +126,57 @@ export async function buildPublication({
     bloqueios,
     avisos,
     ia,
+    conferencia_link: conferencia,
+    link_canal: linkCanal,
     pode_publicar: bloqueios.length === 0,
   };
 }
 
+/** Promocao + cupom + preco do produto: o mesmo calculo no post e na previa. */
+function precosDaOferta(produto, { promotion_id, coupon_id, reference = new Date() } = {}) {
+  const promocao = promotion_id
+    ? promotionRepository.findById(promotion_id)
+    : activePromotionFor(produto.id, reference);
+
+  const cupom = coupon_id
+    ? couponRepository.findById(coupon_id)
+    : (promocao?.coupon_id ? couponRepository.findById(promocao.coupon_id) : bestCouponFor(produto, reference));
+
+  const precos = calculatePricing({ product: produto, promotion: promocao, coupon: cupom, reference });
+  return { promocao, cupom, precos };
+}
+
+/**
+ * Previa do editor de template com um produto de verdade. Antes ignorava a
+ * promocao ativa e o melhor cupom: a previa mostrava um preco e o post saia
+ * com outro.
+ */
+export function previaDoTemplate(corpo, { product_id, coupon_id } = {}) {
+  const produto = product_id
+    ? productRepository.findById(product_id)
+    : productRepository.findAll({ limit: 1 }).rows[0];
+  if (!produto) return null;
+
+  const { promocao, precos } = precosDaOferta(produto, { coupon_id });
+  const { mensagem, context } = renderPublication({
+    template: { corpo }, product: produto, pricing: precos, promotion: promocao, coupon: precos.cupom,
+    extras: { menor_preco: seloMenorPreco(produto)?.selo },
+  });
+  return { mensagem, contexto: context, precos, produto: produto.titulo_original };
+}
+
 /** O que impede a publicacao (bloqueio) e o que so merece aviso. */
-export function validatePublication({ produto, precos, promocao, cupom, mensagem }) {
+export function validatePublication({
+  produto, precos, promocao, cupom, mensagem, conferencia = null,
+}) {
   const bloqueios = [];
   const avisos = [];
 
   if (!precos.valido) bloqueios.push('Produto sem preco valido');
   if (produto.disponibilidade && produto.disponibilidade !== 'disponivel') bloqueios.push('Produto indisponivel');
-  if (produto.status === 'pausado') bloqueios.push('Produto pausado');
-  if (produto.status === 'expirado') bloqueios.push('Produto expirado');
+  // Qualquer status fora de "ativo" (pausado, expirado, arquivado) bloqueia;
+  // antes "arquivado" passava.
+  if (produto.status && produto.status !== 'ativo') bloqueios.push(`Produto ${produto.status}`);
 
   const link = produto.url_final || produto.url_afiliado || produto.url_original;
   if (!link) bloqueios.push('Produto sem link');
@@ -127,13 +190,19 @@ export function validatePublication({ produto, precos, promocao, cupom, mensagem
 
   // O pior erro silencioso do ramo: publicar bonito e nao ganhar comissao.
   const exige = exigeLinkDoPainel(produto.marketplace);
-  const linkTemRastreio = /\/sec\/|meli\.la\/|s\.shopee\.|shope\.ee|amzn\.to|s\.click\.aliexpress\./i
-    .test(produto.url_final || '');
+  const linkTemRastreio = ehLinkDeAfiliadoCurto(produto.url_final);
 
   if (exige && !linkTemRastreio) {
     avisos.push(`SEM COMISSAO: ${exige} Cole o link gerado no painel no campo "Link de afiliado" do produto.`);
   } else if (!produto.url_afiliado) {
     avisos.push('Sem link de afiliado: usando o link original (a venda nao sera atribuida a voce)');
+  }
+
+  // Comissao para outra conta e pior que sem comissao: bloqueia.
+  if (conferencia?.confere === false) {
+    bloqueios.push(`Link de afiliado de OUTRA conta: ${conferencia.motivo}`);
+  } else if (conferencia?.confere === null && linkTemRastreio) {
+    avisos.push(`ID de afiliado nao conferido: ${conferencia.motivo}`);
   }
 
   return { bloqueios, avisos };
@@ -145,13 +214,22 @@ export function validatePublication({ produto, precos, promocao, cupom, mensagem
 export function isDuplicate(productId, channelId, dias = 7) {
   if (!dias || dias <= 0) return false;
   const limite = new Date(Date.now() - dias * 86400000).toISOString();
-  const encontrada = publicationRepository.findOne({
+  const enviada = publicationRepository.findOne({
     product_id: productId,
     channel_id: channelId,
     status: 'enviado',
     enviado_em: { gte: limite },
   });
-  return Boolean(encontrada);
+  if (enviada) return true;
+  // Ainda na fila também conta: com a fila atrasada (grupo fechado, pausa
+  // anti-bloqueio), a campanha rodava de novo e enfileirava o mesmo produto
+  // para o mesmo grupo antes do primeiro post sair.
+  const naFila = publicationRepository.findOne({
+    product_id: productId,
+    channel_id: channelId,
+    status: ['aguardando', 'enviando'],
+  });
+  return Boolean(naFila);
 }
 
 /** Coloca na fila. Nao envia nada aqui: quem envia e o worker/processarFila. */
@@ -167,7 +245,9 @@ export async function enqueue({
     throw badRequest(`Produto ja publicado neste canal nos ultimos ${nao_repetir_dias} dias`);
   }
 
-  const post = await buildPublication({ product_id, promotion_id, coupon_id, template_id, usar_ia });
+  const post = await buildPublication({
+    product_id, promotion_id, coupon_id, template_id, usar_ia, channel_id,
+  });
   if (post.bloqueios.length) {
     throw badRequest(`Publicacao bloqueada: ${post.bloqueios.join('; ')}`, { bloqueios: post.bloqueios });
   }
@@ -197,20 +277,15 @@ export async function enqueue({
 export function channelWindowOpen(canal, reference = new Date()) {
   if (canal.status !== 'ativo') return { aberto: false, motivo: 'canal_pausado' };
 
-  const agora = hhmmToMinutes(localHHMM(reference, config.app.timezone));
-  const inicio = hhmmToMinutes(canal.hora_inicio || '00:00');
-  const fim = hhmmToMinutes(canal.hora_fim || '23:59');
-  if (inicio !== null && fim !== null && agora !== null) {
-    const dentro = inicio <= fim ? (agora >= inicio && agora <= fim) : (agora >= inicio || agora <= fim);
-    if (!dentro) return { aberto: false, motivo: 'fora_do_horario' };
+  if (!dentroDoHorario(canal.hora_inicio, canal.hora_fim, reference, config.app.timezone)) {
+    return { aberto: false, motivo: 'fora_do_horario' };
   }
 
   if (canal.limite_diario) {
-    const dia = localDay(reference, config.app.timezone);
     const enviadasHoje = publicationRepository.count({
       channel_id: canal.id,
       status: 'enviado',
-      enviado_em: { gte: `${dia}T00:00:00.000Z` },
+      enviado_em: { gte: inicioDoDiaIso(reference, config.app.timezone) },
     });
     if (enviadasHoje >= Number(canal.limite_diario)) return { aberto: false, motivo: 'limite_diario' };
   }
@@ -224,12 +299,23 @@ export function channelWindowOpen(canal, reference = new Date()) {
  */
 export async function processQueue({ limite = 10, reference = new Date(), forcar = false } = {}) {
   const agora = reference.toISOString();
+  liberarEnviosTravados();
 
-  const candidatas = publicationRepository.list({
-    filters: { status: ['aguardando', 'erro'] },
-    sort: 'agendado_para ASC',
-    limit: 200,
-  });
+  // So o que pode sair agora entra na leitura. Antes vinham as 200 primeiras
+  // de 'aguardando' + 'erro', e erro definitivo (que nunca sai da tabela) ou
+  // post de grupo fechado ocupavam as 200 vagas: a fila parava sem aviso.
+  const fechados = channelRepository.listAll()
+    .filter((c) => !forcar && !channelWindowOpen(c, reference).aberto)
+    .map((c) => c.id);
+  const condicoes = [{
+    sql: "status = 'aguardando' OR (status = 'erro' AND tentativas < ? AND (proxima_tentativa IS NULL OR proxima_tentativa <= ?))",
+    params: [MAX_TENTATIVAS, agora],
+  }];
+  if (!forcar) condicoes.push({ sql: 'agendado_para IS NULL OR agendado_para <= ?', params: [agora] });
+  if (fechados.length) {
+    condicoes.push({ sql: `channel_id NOT IN (${fechados.map(() => '?').join(', ')})`, params: fechados });
+  }
+  const candidatas = publicationRepository.list({ raw: condicoes, sort: 'agendado_para ASC', limit: 200 });
 
   const resultado = { processadas: 0, enviadas: 0, erros: 0, adiadas: 0, detalhes: [] };
 
@@ -258,8 +344,31 @@ export async function processQueue({ limite = 10, reference = new Date(), forcar
       }
     }
 
+    // Anti-bloqueio: um envio de verdade por vez, com pausa sorteada entre
+    // eles. O que nao cabe agora fica na fila para o proximo ciclo.
+    const comPausa = !pub.dry_run && !config.runtime.dryRun && precisaPausaAntiBloqueio(canal);
+    if (comPausa && !forcar && (envioRealEmAndamento || Date.now() < proximoEnvioPermitido)) {
+      resultado.adiadas += 1;
+      resultado.detalhes.push({ id: pub.id, status: 'adiada', motivo: 'pausa_entre_envios' });
+      continue;
+    }
+
+    // Reserva ANTES do await: worker e n8n chamando processQueue juntos
+    // passariam os dois pela checagem acima e postariam ao mesmo tempo.
+    if (comPausa) envioRealEmAndamento = true;
     resultado.processadas += 1;
-    const envio = await sendPublication(pub, canal);
+    let envio;
+    try {
+      envio = await sendPublication(pub, canal);
+    } finally {
+      if (comPausa) envioRealEmAndamento = false;
+    }
+    if (envio.ignorada) {
+      resultado.processadas -= 1;
+      resultado.detalhes.push({ id: pub.id, status: 'ignorada', motivo: envio.erro });
+      continue;
+    }
+    if (comPausa) proximoEnvioPermitido = Date.now() + sortearPausaMs();
     if (envio.ok) resultado.enviadas += 1; else resultado.erros += 1;
     resultado.detalhes.push({ id: pub.id, status: envio.ok ? 'enviada' : 'erro', motivo: envio.erro || null });
   }
@@ -270,14 +379,71 @@ export async function processQueue({ limite = 10, reference = new Date(), forcar
   return resultado;
 }
 
+let proximoEnvioPermitido = 0;
+let envioRealEmAndamento = false;
+
+/** Pausa aleatoria entre dois envios reais (ENVIO_PAUSA_MIN/MAX_SEGUNDOS). */
+export function sortearPausaMs() {
+  const min = Math.max(0, Number(config.envio.pausaMinSegundos) || 0);
+  const max = Math.max(min, Number(config.envio.pausaMaxSegundos) || 0);
+  return Math.round((min + Math.random() * (max - min)) * 1000);
+}
+
+/** Para testes e para quem precisa zerar o espacamento (ex.: reinicio manual). */
+export function zerarPausaEntreEnvios() {
+  proximoEnvioPermitido = 0;
+  envioRealEmAndamento = false;
+}
+
+/**
+ * Publicacao presa em "enviando" (o app caiu no meio do envio) vira erro
+ * DEFINITIVO com alerta: a mensagem pode ter saido, entao reenviar sozinho
+ * arriscaria post duplicado no grupo.
+ */
+function liberarEnviosTravados() {
+  const limite = new Date(Date.now() - 10 * 60000).toISOString();
+  const travadas = publicationRepository.list({
+    filters: { status: 'enviando', atualizado_em: { lt: limite } },
+    limit: 100,
+  });
+  for (const pub of travadas) {
+    marcarErro(pub, 'Envio interrompido (o app parou no meio). Confira no grupo se saiu antes de reenviar.', true);
+  }
+}
+
 /** Envia de fato (ou simula, se dry run). Atualiza status, produto e canal. */
 export async function sendPublication(pub, canal = null) {
   const destino = canal || channelRepository.findById(pub.channel_id);
   if (!destino) return { ok: false, erro: 'Canal nao encontrado' };
 
+  // Reserva antes de enviar: worker, n8n e o botao "enviar" podem pegar a
+  // mesma publicacao. Ler e marcar sem await no meio e atomico no Node —
+  // quem chega depois ve "enviando" e desiste, em vez de postar duplicado.
+  const atual = publicationRepository.findById(pub.id);
+  if (!atual || !['aguardando', 'erro'].includes(atual.status)) {
+    return { ok: false, ignorada: true, erro: `Publicacao ja esta "${atual?.status || 'removida'}"` };
+  }
   publicationRepository.update(pub.id, { status: 'enviando' });
 
   const simular = Boolean(pub.dry_run) || config.runtime.dryRun;
+
+  // O post foi montado quando entrou na fila; pode sair horas depois (grupo
+  // fechado à noite, pausa anti-bloqueio). Cupom que venceu à meia-noite ou
+  // promoção que acabou não podem ir para o grupo com o preço de ontem.
+  let conferido;
+  try {
+    conferido = await revalidarAntesDeEnviar({ ...pub, ...atual });
+  } catch (err) {
+    // Falha inesperada ao remontar: tenta de novo depois, sem enviar agora.
+    marcarErro(atual, `Nao consegui conferir o post antes de enviar: ${err.message}`, false);
+    return { ok: false, erro: err.message };
+  }
+  if (!conferido.ok) {
+    marcarErro(atual, conferido.motivo, true);
+    log.warn(`Publicacao nao enviada: ${conferido.motivo}`, { publicacao: pub.id });
+    return { ok: false, erro: conferido.motivo };
+  }
+  pub = conferido.pub;
 
   try {
     let envio;
@@ -285,8 +451,7 @@ export async function sendPublication(pub, canal = null) {
       envio = { id: `dry_${pub.id}`, provider: 'dry-run', simulado: true };
       log.info(`[DRY RUN] Nao enviado de verdade para ${destino.nome}`, { publicacao: pub.id });
     } else {
-      const provider = getWhatsAppProvider({ session: destino.sessao || undefined });
-      envio = await provider.sendMessage({
+      envio = await mensageiroDo(destino).sendMessage({
         chatId: destino.identificador,
         texto: pub.mensagem,
         imagem: pub.imagem || undefined,
@@ -299,7 +464,7 @@ export async function sendPublication(pub, canal = null) {
       enviado_em: em,
       provider_message_id: envio.id || null,
       erro: null,
-      tentativas: Number(pub.tentativas || 0) + 1,
+      tentativas: Number(atual.tentativas || 0) + 1,
     });
 
     channelRepository.update(destino.id, { ultimo_envio: em });
@@ -325,11 +490,57 @@ export async function sendPublication(pub, canal = null) {
 
     return { ok: true, simulado: simular, id: envio.id };
   } catch (err) {
-    const definitivo = Number(pub.tentativas || 0) + 1 >= MAX_TENTATIVAS;
-    marcarErro(pub, err.message, definitivo);
+    // `atual` e o registro lido agora; `pub` pode vir de uma lista antiga
+    // e contar tentativas a menos.
+    const definitivo = Number(atual.tentativas || 0) + 1 >= MAX_TENTATIVAS;
+    marcarErro(atual, err.message, definitivo);
     log.error(`Falha ao publicar: ${err.message}`, { publicacao: pub.id, canal: destino.nome, definitivo });
     return { ok: false, erro: err.message };
   }
+}
+
+/** Post parado na fila mais que isto é remontado com os dados de agora. */
+const IDADE_PARA_REVALIDAR_MS = 10 * 60000;
+
+/**
+ * @returns {Promise<{ok:true, pub:object}|{ok:false, motivo:string}>}
+ */
+async function revalidarAntesDeEnviar(pub) {
+  if (!pub.product_id) return { ok: true, pub };
+  // Antes da idade: produto apagado (ou pausado) 1 minuto depois de entrar na
+  // fila tambem nao pode sair — muitas vezes foi apagado justamente por erro.
+  const produto = productRepository.findById(pub.product_id);
+  if (!produto) return { ok: false, motivo: 'Produto removido depois de entrar na fila' };
+  if (produto.status !== 'ativo') return { ok: false, motivo: `Produto ${produto.status} depois de entrar na fila` };
+  const idade = Date.now() - Date.parse(pub.criado_em || '');
+  if (!(idade > IDADE_PARA_REVALIDAR_MS)) return { ok: true, pub };
+
+  const post = await buildPublication({
+    product_id: pub.product_id,
+    coupon_id: pub.coupon_id || undefined,
+    template_id: pub.template_id || undefined,
+    channel_id: pub.channel_id,
+  });
+  if (post.bloqueios.length) return { ok: false, motivo: `Nao saiu (mudou desde que entrou na fila): ${post.bloqueios.join('; ')}` };
+
+  const mudou = post.precos.preco_final !== pub.preco_final_publicado
+    || (post.cupom?.codigo || null) !== (pub.cupom_publicado || null);
+  if (!mudou) return { ok: true, pub };
+
+  // O texto e remontado sem IA: o que importa aqui e o numero estar certo.
+  const campos = {
+    mensagem: post.mensagem,
+    imagem: post.produto.imagem_principal || null,
+    promotion_id: post.promocao?.id || null,
+    coupon_id: post.cupom?.id || null,
+    preco_publicado: post.precos.preco_base,
+    preco_final_publicado: post.precos.preco_final,
+    desconto_publicado: post.precos.desconto_percentual,
+    cupom_publicado: post.cupom?.codigo || null,
+  };
+  publicationRepository.update(pub.id, campos);
+  log.info('Preco/cupom mudou enquanto o post esperava na fila: mensagem atualizada', { publicacao: pub.id });
+  return { ok: true, pub: { ...pub, ...campos } };
 }
 
 function marcarErro(pub, mensagem, definitivo) {
@@ -339,7 +550,8 @@ function marcarErro(pub, mensagem, definitivo) {
   publicationRepository.update(pub.id, {
     status: 'erro',
     erro: String(mensagem).slice(0, 500),
-    tentativas,
+    // Definitivo tem que parar de vez: a fila so desiste com tentativas no teto.
+    tentativas: definitivo ? Math.max(tentativas, MAX_TENTATIVAS) : tentativas,
     proxima_tentativa: definitivo ? null : addMinutes(new Date(), espera).toISOString(),
   });
 
@@ -366,6 +578,11 @@ export function cancelPublication(id) {
 export function retryPublication(id) {
   const pub = publicationRepository.findById(id);
   if (!pub) throw notFound('Publicacao');
+  // Só o que falhou ou foi cancelado volta para a fila: "tentar de novo" num
+  // post já enviado (ou saindo agora) postaria duplicado no grupo.
+  if (!['erro', 'cancelado'].includes(pub.status)) {
+    throw badRequest(`Publicacao "${pub.status}" nao pode voltar para a fila`);
+  }
   return publicationRepository.update(id, {
     status: 'aguardando',
     tentativas: 0,
@@ -376,8 +593,7 @@ export function retryPublication(id) {
 }
 
 export function publicationStats(reference = new Date()) {
-  const dia = localDay(reference, config.app.timezone);
-  const inicioDoDia = `${dia}T00:00:00.000Z`;
+  const inicioDoDia = inicioDoDiaIso(reference, config.app.timezone);
 
   const proxima = publicationRepository.findAll({
     filters: { status: 'aguardando' },

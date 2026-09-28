@@ -40,7 +40,9 @@ linha('IA', config.ai.provider !== 'mock', `provider: ${config.ai.provider}`);
 
 if (appOnline) {
   try {
-    const d = await (await fetch(`${appUrl}/api/sistema/dashboard`)).json();
+    // Painel com senha (APP_TOKEN) respondia 401 e os números sumiam sem aviso.
+    const headers = config.app.token ? { 'x-api-token': config.app.token } : {};
+    const d = await (await fetch(`${appUrl}/api/sistema/dashboard`, { headers })).json();
     console.log('');
     console.log(`   Produtos ativos ....... ${d.produtos.ativos}`);
     console.log(`   Promoções ativas ...... ${d.promocoes.ativas}`);

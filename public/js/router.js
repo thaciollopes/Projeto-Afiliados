@@ -10,6 +10,7 @@ import { renderTemplates } from './pages/templates.js';
 import { renderFila, renderHistorico } from './pages/publicacoes.js';
 import { renderSistema, renderStatus } from './pages/sistema.js';
 import { paginaCrud } from './pages/crud.js';
+import { renderManual } from './pages/manual.js';
 import { escapar, moeda, dataCurta, etiqueta, statusEtiqueta } from './ui.js';
 
 const renderCategorias = paginaCrud({
@@ -90,6 +91,7 @@ export const rotas = {
   historico: { titulo: 'Histórico', render: renderHistorico },
   sistema: { titulo: 'Sistema', render: renderSistema },
   status: { titulo: 'Status', render: renderStatus },
+  manual: { titulo: 'Manual', render: renderManual },
 };
 
 export { moeda, dataCurta };

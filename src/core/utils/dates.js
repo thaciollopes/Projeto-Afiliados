@@ -62,3 +62,26 @@ export function hhmmToMinutes(hhmm) {
   if (!m) return null;
   return Number(m[1]) * 60 + Number(m[2]);
 }
+
+/**
+ * Meia-noite de HOJE no fuso configurado, em ISO UTC. "Enviadas hoje" era
+ * contado a partir de `${dia}T00:00Z` — que no Brasil é 21:00 da véspera:
+ * o que saía das 21h à meia-noite contava no limite do dia seguinte.
+ */
+export function inicioDoDiaIso(reference = new Date(), timeZone = 'America/Sao_Paulo') {
+  const [ano, mes, dia] = localDay(reference, timeZone).split('-').map(Number);
+  const meiaNoiteUtc = Date.UTC(ano, mes - 1, dia);
+  // Diferença do fuso naquele instante (horário de verão incluso).
+  const noFuso = new Date(new Date(meiaNoiteUtc).toLocaleString('en-US', { timeZone }));
+  const emUtc = new Date(new Date(meiaNoiteUtc).toLocaleString('en-US', { timeZone: 'UTC' }));
+  return new Date(meiaNoiteUtc - (noFuso - emUtc)).toISOString();
+}
+
+/** Agora está entre "HH:MM" e "HH:MM" no fuso? Janela que vira a meia-noite vale (22:00–02:00). */
+export function dentroDoHorario(inicio, fim, reference = new Date(), timeZone = 'America/Sao_Paulo') {
+  const agora = hhmmToMinutes(localHHMM(reference, timeZone));
+  const de = hhmmToMinutes(inicio || '00:00');
+  const ate = hhmmToMinutes(fim || '23:59');
+  if (de === null || ate === null || agora === null) return true;
+  return de <= ate ? (agora >= de && agora <= ate) : (agora >= de || agora <= ate);
+}

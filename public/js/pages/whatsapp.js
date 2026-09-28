@@ -84,9 +84,11 @@ export async function renderWhatsApp() {
 export async function renderCanais() {
   const CAMPOS = [
     { nome: 'nome', rotulo: 'Nome do grupo/canal', obrigatorio: true, largura: 2 },
-    { nome: 'identificador', rotulo: 'Identificador', obrigatorio: true, largura: 2, dica: 'ex.: 1203630000@g.us' },
+    { nome: 'provider', rotulo: 'Onde publica', tipo: 'select', opcoes: [{ valor: 'waha', rotulo: 'WhatsApp' }, { valor: 'telegram', rotulo: 'Telegram' }] },
     { nome: 'tipo', rotulo: 'Tipo', tipo: 'select', opcoes: [{ valor: 'grupo', rotulo: 'Grupo' }, { valor: 'canal', rotulo: 'Canal' }, { valor: 'contato', rotulo: 'Contato' }] },
-    { nome: 'sessao', rotulo: 'Sessão do WAHA', dica: 'normalmente "default"' },
+    { nome: 'identificador', rotulo: 'Identificador', obrigatorio: true, largura: 2, dica: 'WhatsApp: 1203630000@g.us (grupo) ou 1203630000@newsletter (canal). Telegram: @seucanal ou -100…' },
+    { nome: 'sessao', rotulo: 'Sessão do WAHA', dica: 'só WhatsApp; normalmente "default"' },
+    { nome: 'sub_id', rotulo: 'Sub ID (Shopee)', dica: 'aparece no relatório da Shopee; vazio = gerado do nome' },
     { nome: 'intervalo_minutos', rotulo: 'Intervalo (min)', tipo: 'number' },
     { nome: 'limite_diario', rotulo: 'Máximo por dia', tipo: 'number' },
     { nome: 'hora_inicio', rotulo: 'Hora inicial', dica: 'HH:MM' },
@@ -121,7 +123,7 @@ export async function renderCanais() {
       colunas: [
         { rotulo: 'Nome', render: (c) => `<strong>${escapar(c.nome)}</strong><br>
             <span class="pequeno texto-fraco">${escapar(c.identificador)}</span>` },
-        { rotulo: 'Tipo', render: (c) => etiqueta(c.tipo) },
+        { rotulo: 'Tipo', render: (c) => `${c.provider === 'telegram' ? '✈️ Telegram' : '🟢 WhatsApp'} ${etiqueta(c.tipo)}` },
         { rotulo: 'Ritmo', render: (c) => `${c.intervalo_minutos}min · ${c.hora_inicio}–${c.hora_fim}` },
         { rotulo: 'Teto diário', render: (c) => c.limite_diario || '—' },
         { rotulo: 'Último envio', render: (c) => dataHora(c.ultimo_envio) },
@@ -216,18 +218,20 @@ export async function renderCanais() {
     }
 
     corpo.classList.remove('carregando');
-    corpo.innerHTML = `<p class="pequeno texto-fraco">${grupos.length} grupo(s) na sessão.</p>`;
+    corpo.innerHTML = `<p class="pequeno texto-fraco">${grupos.length} grupo(s)/canal(is) na sessão.
+      Telegram não aparece aqui: cadastre em "Adicionar" com o @ do canal.</p>`;
     const lista = el('<div></div>');
     for (const grupo of grupos) {
       const item = el(`
         <label class="check" style="padding:6px 0;border-bottom:1px solid var(--borda)">
           <input type="checkbox" value="${escapar(grupo.identificador)}" ${grupo.ja_cadastrado ? 'disabled' : ''}>
-          <span>${escapar(grupo.nome)}
-            <span class="pequeno texto-fraco">${grupo.participantes ? `${grupo.participantes} membros` : ''}
+          <span>${grupo.tipo === 'canal' ? '📢 ' : ''}${escapar(grupo.nome)}
+            <span class="pequeno texto-fraco">${grupo.tipo === 'canal' ? 'canal · ' : ''}${grupo.participantes ? `${grupo.participantes} membros` : ''}
             ${grupo.ja_cadastrado ? '· já cadastrado' : ''}</span>
           </span>
         </label>`);
       item.dataset.nome = grupo.nome;
+      item.dataset.tipo = grupo.tipo || 'grupo';
       lista.appendChild(item);
     }
     corpo.appendChild(lista);
@@ -240,7 +244,7 @@ export async function renderCanais() {
         await api.post('/canais', {
           nome: input.closest('label').dataset.nome,
           identificador: input.value,
-          tipo: 'grupo', provider: 'waha', status: 'ativo',
+          tipo: input.closest('label').dataset.tipo, provider: 'waha', status: 'ativo',
           intervalo_minutos: 30, limite_diario: 20, hora_inicio: '08:00', hora_fim: '22:00',
         }).catch(() => null);
       }

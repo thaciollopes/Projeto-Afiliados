@@ -6,6 +6,17 @@ import { conectarLoja, detectarEtiqueta, DOMINIOS } from './conectar.js';
 
 const $ = (id) => document.getElementById(id);
 
+/** Painel com senha (APP_TOKEN, obrigatório numa VPS) recusa sem este cabeçalho. */
+function cabecalhos() {
+  const token = $('token').value.trim();
+  return { 'Content-Type': 'application/json', ...(token ? { 'x-api-token': token } : {}) };
+}
+
+function explicarRecusa(status) {
+  if (status === 401) return 'O painel pediu o token de acesso — preencha o campo "Token" abaixo.';
+  return `O painel respondeu ${status}`;
+}
+
 /** Qual loja esta na aba aberta agora. */
 async function lojaDaAba() {
   const [aba] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -30,7 +41,7 @@ async function prepararConexao() {
 
     try {
       const api = $('api').value.replace(/\/+$/, '');
-      const r = await conectarLoja(loja, api);
+      const r = await conectarLoja(loja, api, cabecalhos());
       const etiqueta = await detectarEtiqueta(loja);
 
       status.innerHTML = `<span class="ok">✅ Conectado — ${r.total_cookies} cookies salvos`
@@ -41,11 +52,15 @@ async function prepararConexao() {
   };
 }
 
-chrome.storage.local.get(['api'], (guardado) => {
+chrome.storage.local.get(['api', 'token'], (guardado) => {
   if (guardado.api) $('api').value = guardado.api;
+  if (guardado.token) $('token').value = guardado.token;
 });
 $('api').addEventListener('change', () => {
   chrome.storage.local.set({ api: $('api').value.replace(/\/+$/, '') });
+});
+$('token').addEventListener('change', () => {
+  chrome.storage.local.set({ token: $('token').value.trim() });
 });
 
 async function lerPagina() {
@@ -78,7 +93,6 @@ async function analisar() {
 
 $('capturar').onclick = async () => {
   const dados = await analisar();
-prepararConexao();
   if (!dados?.produtos.length) return;
 
   $('resultado').innerHTML = '<span class="fraco">Enviando para o painel…</span>';
@@ -88,15 +102,21 @@ prepararConexao();
     const base = $('api').value.replace(/\/+$/, '');
     const res = await fetch(`${base}/api/produtos/importar`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: cabecalhos(),
       body: JSON.stringify({ produtos: dados.produtos, origem: 'extensao' }),
     });
 
-    if (!res.ok) throw new Error(`O painel respondeu ${res.status}`);
+    if (!res.ok) throw new Error(explicarRecusa(res.status));
     const r = await res.json();
 
+    // O link de afiliado (meli.la, s.shopee) é gerado na hora pelo cookie:
+    // mostra se deu, para ninguém publicar achando que tem comissão.
+    const links = Object.entries(r.conversao || {}).map(([loja, c]) => (c.erro
+      ? `<br><span class="erro">⚠️ ${loja}: link de afiliado não gerado — ${c.erro}</span>`
+      : `<br><span class="fraco">🔗 ${loja}: ${c.convertidos || 0} link(s) de afiliado gerados</span>`)).join('');
+
     $('resultado').innerHTML = `<span class="ok"><b>✅ ${r.criados} novos</b> · `
-      + `${r.atualizados} já existiam (atualizados)</span>`;
+      + `${r.atualizados} já existiam (atualizados)</span>${links}`;
   } catch (e) {
     $('resultado').innerHTML = `<span class="erro">❌ ${e.message}</span>`
       + '<br><span class="fraco">O painel está aberto? (INICIAR.bat)</span>';
@@ -107,7 +127,6 @@ prepararConexao();
 
 $('ver').onclick = async () => {
   const dados = await analisar();
-prepararConexao();
   if (!dados?.produtos.length) return;
 
   const lista = dados.produtos.slice(0, 5)

@@ -3,13 +3,15 @@
  */
 import {
   productRepository, priceHistoryRepository, alertRepository, settingRepository,
+  publicationRepository, promotionRepository, linkCanalRepository,
 } from '../repositories/index.js';
 import { calculateScore, DEFAULT_SCORE_WEIGHTS } from './pricingService.js';
 import { searchAll, getMarketplace } from '../../integrations/marketplaces/index.js';
 import { buildAffiliateUrl } from './affiliateLinkService.js';
 import { iniciarProgresso, concluirProgresso } from './progressoBuscaService.js';
 import { percentOff, round2 } from '../utils/money.js';
-import { nowIso, daysAgoIso } from '../utils/dates.js';
+import { nowIso, daysAgoIso, inicioDoDiaIso } from '../utils/dates.js';
+import { config } from '../../config/index.js';
 import { logger } from '../utils/logger.js';
 import { notFound, badRequest } from '../utils/errors.js';
 
@@ -76,8 +78,19 @@ export function updateProduct(id, patch) {
   return productRepository.update(id, produto);
 }
 
+/**
+ * Apaga o produto e o que so fazia sentido com ele. Post na fila e cancelado
+ * (nao pode sair oferta de produto que voce apagou); promocao do produto,
+ * historico de preco e links por grupo iam ficando orfaos no banco.
+ */
 export function deleteProduct(id) {
   getProduct(id);
+  for (const pub of publicationRepository.listAll({ filters: { product_id: id, status: ['aguardando', 'erro'] } })) {
+    publicationRepository.update(pub.id, { status: 'cancelado', erro: 'Produto removido' });
+  }
+  promotionRepository.removeWhere({ product_id: id });
+  priceHistoryRepository.removeWhere({ product_id: id });
+  linkCanalRepository.removeWhere({ product_id: id });
   return productRepository.remove(id);
 }
 
@@ -135,6 +148,7 @@ export async function searchMarketplaces(filtros = {}) {
 export function importProducts(produtos = [], origem = 'busca') {
   let criados = 0;
   let atualizados = 0;
+  const ids = [];
 
   for (const bruto of produtos) {
     if (!bruto?.titulo_original || !bruto?.marketplace) continue;
@@ -147,26 +161,39 @@ export function importProducts(produtos = [], origem = 'busca') {
       registrarMudancaPreco(existente, Number(bruto.preco_atual), origem);
     }
 
+    // A busca devolve o link cru; o link de afiliado ja gerado (meli.la,
+    // s.shopee) nao pode ser trocado por ele a cada reimportacao — era assim
+    // que o post saia sem comissao depois de a oferta aparecer de novo.
+    const mesmoProduto = existente && semRastreio(existente.url_original) === semRastreio(bruto.url_original);
     const dados = derive({
       ...bruto,
+      url_afiliado: bruto.url_afiliado || (mesmoProduto ? existente.url_afiliado : null) || null,
       data_atualizacao: nowIso(),
       data_coleta: existente?.data_coleta || bruto.data_coleta || nowIso(),
       origem,
-      status: existente?.status || 'ativo',
+      // Expirado = ficou parado sem atualizacao. Se a oferta voltou a
+      // aparecer, volta a valer; pausado foi decisao sua e continua.
+      status: existente && existente.status !== 'expirado' ? existente.status : 'ativo',
     });
     delete dados.ja_cadastrado;
     delete dados.id_cadastrado;
     delete dados.id;
 
-    const { created } = productRepository.upsertBy(
+    const { record, created } = productRepository.upsertBy(
       { marketplace: dados.marketplace, external_id: dados.external_id },
       dados,
     );
+    if (record?.id) ids.push(record.id);
     if (created) criados += 1; else atualizados += 1;
   }
 
   log.info(`Importacao concluida: ${criados} novos, ${atualizados} atualizados`, { origem });
-  return { criados, atualizados, total: criados + atualizados };
+  return { criados, atualizados, total: criados + atualizados, ids };
+}
+
+/** A mesma pagina de produto, ignorando a query (sp_atk, utm... mudam a cada visita). */
+function semRastreio(url) {
+  return String(url || '').split(/[?#]/)[0].replace(/\/+$/, '').toLowerCase();
 }
 
 /** Recoleta o produto no marketplace de origem e atualiza preco/disponibilidade. */
@@ -194,7 +221,7 @@ export async function refreshProduct(id) {
 /** Recalcula o score de todos (usado quando os pesos mudam). */
 export function recalculateScores() {
   const pesos = scoreWeights();
-  const todos = productRepository.list({ limit: 1000 });
+  const todos = productRepository.listAll();
   for (const produto of todos) {
     productRepository.update(produto.id, { score: calculateScore(produto, pesos) });
   }
@@ -202,14 +229,14 @@ export function recalculateScores() {
 }
 
 export function productStats() {
-  const hoje = new Date().toISOString().slice(0, 10);
+  const inicioDeHoje = inicioDoDiaIso(new Date(), config.app.timezone);
   return {
     total: productRepository.count(),
     ativos: productRepository.count({ status: 'ativo' }),
     pausados: productRepository.count({ status: 'pausado' }),
     expirados: productRepository.count({ status: 'expirado' }),
     indisponiveis: productRepository.count({ disponibilidade: 'indisponivel' }),
-    coletados_hoje: productRepository.count({ data_coleta: { gte: `${hoje}T00:00:00.000Z` } }),
+    coletados_hoje: productRepository.count({ data_coleta: { gte: inicioDeHoje } }),
     nunca_publicados: productRepository.count({ data_ultima_publicacao: null }),
   };
 }
@@ -217,9 +244,8 @@ export function productStats() {
 /** Marca como expirado o que ficou parado tempo demais sem atualizacao. */
 export function expireStaleProducts(dias = 30) {
   const limite = daysAgoIso(dias);
-  const antigos = productRepository.list({
+  const antigos = productRepository.listAll({
     filters: { status: 'ativo', data_atualizacao: { lt: limite } },
-    limit: 1000,
   });
   for (const produto of antigos) {
     productRepository.update(produto.id, { status: 'expirado' });

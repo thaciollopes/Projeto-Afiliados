@@ -27,7 +27,9 @@
         "url": "={{ $env.AFILIADOS_API || 'http://host.docker.internal:3010' }}/api/sistema/dashboard",
         "options": {
           "timeout": 120000
-        }
+        },
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "x-api-token", "value": "={{ $env.AFILIADOS_TOKEN || '' }}" }] }
       },
       "id": "b0000082-0000-4000-8000-000000000082",
       "name": "Dashboard",

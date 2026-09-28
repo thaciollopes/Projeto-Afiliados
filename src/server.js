@@ -24,6 +24,12 @@ const server = app.listen(config.app.port, config.app.host, () => {
   console.log(`   IA:         ${config.ai.provider}`);
   console.log('  ===============================================');
   console.log('');
+  // Aberto para a rede sem senha: qualquer um no mesmo Wi-Fi (ou na internet,
+  // numa VPS) controla o painel, os cookies das lojas e os envios.
+  if (!config.app.token && !/^(127\.|localhost$|::1$)/.test(String(config.app.host))) {
+    log.warn(`Painel ouvindo em ${config.app.host} SEM APP_TOKEN: qualquer um que alcance esta porta controla o sistema. `
+      + 'Defina APP_TOKEN no .env (ou APP_HOST=127.0.0.1 para uso só neste computador).');
+  }
   startScheduler();
 });
 

@@ -7,13 +7,16 @@ import { config, publicConfig } from '../../config/index.js';
 import { getDb } from '../db/index.js';
 import { getWhatsAppProvider } from '../../integrations/whatsapp/index.js';
 import { n8nClient } from '../../integrations/n8n/client.js';
+import { getTelegramProvider } from '../../integrations/mensageiros.js';
 import { aiStatus } from '../../integrations/ai/index.js';
 import { marketplacesStatus } from '../../integrations/marketplaces/index.js';
 import { productRepository } from '../repositories/index.js';
 
 export async function systemStatus() {
-  const [whatsapp, n8n, ia, marketplaces] = await Promise.all([
+  const [whatsapp, telegram, n8n, ia, marketplaces] = await Promise.all([
     checar(() => getWhatsAppProvider().status()),
+    // Sem token o Telegram simplesmente nao esta em uso: nao e erro.
+    config.telegram.token ? checar(() => getTelegramProvider().status()) : { online: null, em_uso: false },
     checar(() => n8nClient.status()),
     checar(() => aiStatus()),
     checar(() => marketplacesStatus()),
@@ -23,6 +26,7 @@ export async function systemStatus() {
     app: appStatus(),
     banco: dbStatus(),
     whatsapp,
+    telegram,
     n8n,
     ia,
     marketplaces,

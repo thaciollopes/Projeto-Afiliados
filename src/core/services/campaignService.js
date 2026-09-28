@@ -6,13 +6,15 @@
  */
 import {
   campaignRepository, campaignTargetRepository, channelRepository,
-  productRepository, promotionRepository, savedSearchRepository,
+  productRepository, promotionRepository, savedSearchRepository, publicationRepository,
 } from '../repositories/index.js';
 import { enqueue, isDuplicate, channelWindowOpen } from './publicationService.js';
 import { activePromotionFor } from './promotionService.js';
 import { bestCouponFor } from './couponService.js';
 import { config } from '../../config/index.js';
-import { nowIso, localWeekday, addMinutes } from '../utils/dates.js';
+import {
+  nowIso, localWeekday, addMinutes, dentroDoHorario, inicioDoDiaIso,
+} from '../utils/dates.js';
 import { logger } from '../utils/logger.js';
 import { notFound, badRequest } from '../utils/errors.js';
 
@@ -119,9 +121,13 @@ export function selectProducts(campanha, { limite = 50 } = {}) {
   }
 
   if (campanha.modo === 'promocoes') {
-    const promos = promotionRepository.list({ filters: { status: 'ativa' }, limit: limite });
-    const ids = promos.map((p) => p.product_id).filter(Boolean);
-    return productRepository.findByIds(ids).filter((p) => p.status === 'ativo');
+    // Status "ativa" não basta: promoção que ainda não começou (ou venceu e o
+    // worker ainda não marcou) faria o produto sair sem a promoção no post.
+    const promos = promotionRepository.listAll({ filters: { status: 'ativa' } });
+    const ids = [...new Set(promos.map((p) => p.product_id).filter(Boolean))];
+    return productRepository.findByIds(ids)
+      .filter((p) => p.status === 'ativo' && activePromotionFor(p.id))
+      .slice(0, limite);
   }
 
   if (campanha.modo === 'cupons') {
@@ -189,6 +195,15 @@ export function canRunNow(campanha, reference = new Date()) {
     return { pode: false, motivo: 'fora_do_dia' };
   }
 
+  // Horário e máximo por dia da campanha existiam no formulário mas não eram
+  // aplicados: campanha "08:00–12:00" enfileirava às 20h.
+  if (!dentroDoHorario(campanha.hora_inicio, campanha.hora_fim, reference, config.app.timezone)) {
+    return { pode: false, motivo: 'fora_do_horario' };
+  }
+  if (campanha.limite_diario && publicadasHoje({ campaign_id: campanha.id }, reference) >= Number(campanha.limite_diario)) {
+    return { pode: false, motivo: 'limite_diario' };
+  }
+
   if (campanha.ultima_execucao) {
     const proxima = addMinutes(campanha.ultima_execucao, Number(campanha.intervalo_minutos || 30));
     if (proxima.getTime() > reference.getTime()) {
@@ -228,6 +243,11 @@ export async function runCampaign(campanha, { reference = new Date(), forcar = f
       const intervalo = Number(alvo.intervalo_minutos || campanha.intervalo_minutos || 30);
       if (alvo.ultimo_envio && addMinutes(alvo.ultimo_envio, intervalo).getTime() > reference.getTime()) {
         resultado.ignorados.push({ canal: canal.nome, motivo: 'aguardando_intervalo' });
+        continue;
+      }
+      if (alvo.limite_diario
+          && publicadasHoje({ campaign_id: campanha.id, channel_id: canal.id }, reference) >= Number(alvo.limite_diario)) {
+        resultado.ignorados.push({ canal: canal.nome, motivo: 'limite_diario' });
         continue;
       }
     }
@@ -272,6 +292,15 @@ export async function runCampaign(campanha, { reference = new Date(), forcar = f
     log.info(`Campanha "${campanha.nome}": ${resultado.enfileiradas} publicacao(oes) na fila`);
   }
   return resultado;
+}
+
+/** Posts da campanha criados hoje (na fila ou enviados; cancelado não conta). */
+function publicadasHoje(filtros, reference) {
+  return publicationRepository.count({
+    ...filtros,
+    status: ['aguardando', 'enviando', 'enviado', 'erro'],
+    criado_em: { gte: inicioDoDiaIso(reference, config.app.timezone) },
+  });
 }
 
 /** Roda todas as campanhas ativas (chamado pelo worker a cada tick). */
