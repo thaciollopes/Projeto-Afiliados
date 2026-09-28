@@ -33,6 +33,7 @@ export const LOJAS = {
       obrigatoria: false,
     },
     dicaCookie: 'Exporte o cookie estando na página linkbuilder do painel de afiliados — o "_csrf" precisa vir junto.',
+    cookiesObrigatorios: ['_csrf'],
     comoEntramProdutos: 'Pela busca do sistema (varre as ofertas do ML por categoria e palavra) ou pela extensão. O link vira meli.la sozinho.',
   },
 
@@ -70,6 +71,7 @@ export const LOJAS = {
       obrigatoria: false,
     },
     dicaCookie: 'Exporte o cookie estando logado em affiliate.shopee.com.br (página "Link personalizado") — o "SPC_EC" precisa vir junto.',
+    cookiesObrigatorios: ['SPC_EC'],
     comoEntramProdutos: 'Pela extensão. O link vira s.shopee.com.br sozinho, pelo seu cookie do painel de afiliados.',
   },
 

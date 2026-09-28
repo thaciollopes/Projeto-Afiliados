@@ -79,15 +79,7 @@ export async function buildPublication({
     }
   }
 
-  const promocao = promotion_id
-    ? promotionRepository.findById(promotion_id)
-    : activePromotionFor(produto.id, reference);
-
-  const cupom = coupon_id
-    ? couponRepository.findById(coupon_id)
-    : (promocao?.coupon_id ? couponRepository.findById(promocao.coupon_id) : bestCouponFor(produto, reference));
-
-  const precos = calculatePricing({ product: produto, promotion: promocao, coupon: cupom, reference });
+  const { promocao, cupom, precos } = precosDaOferta(produto, { promotion_id, coupon_id, reference });
 
   const template = template_id
     ? templateRepository.findById(template_id)
@@ -140,6 +132,39 @@ export async function buildPublication({
   };
 }
 
+/** Promocao + cupom + preco do produto: o mesmo calculo no post e na previa. */
+function precosDaOferta(produto, { promotion_id, coupon_id, reference = new Date() } = {}) {
+  const promocao = promotion_id
+    ? promotionRepository.findById(promotion_id)
+    : activePromotionFor(produto.id, reference);
+
+  const cupom = coupon_id
+    ? couponRepository.findById(coupon_id)
+    : (promocao?.coupon_id ? couponRepository.findById(promocao.coupon_id) : bestCouponFor(produto, reference));
+
+  const precos = calculatePricing({ product: produto, promotion: promocao, coupon: cupom, reference });
+  return { promocao, cupom, precos };
+}
+
+/**
+ * Previa do editor de template com um produto de verdade. Antes ignorava a
+ * promocao ativa e o melhor cupom: a previa mostrava um preco e o post saia
+ * com outro.
+ */
+export function previaDoTemplate(corpo, { product_id, coupon_id } = {}) {
+  const produto = product_id
+    ? productRepository.findById(product_id)
+    : productRepository.findAll({ limit: 1 }).rows[0];
+  if (!produto) return null;
+
+  const { promocao, precos } = precosDaOferta(produto, { coupon_id });
+  const { mensagem, context } = renderPublication({
+    template: { corpo }, product: produto, pricing: precos, promotion: promocao, coupon: precos.cupom,
+    extras: { menor_preco: seloMenorPreco(produto)?.selo },
+  });
+  return { mensagem, contexto: context, precos, produto: produto.titulo_original };
+}
+
 /** O que impede a publicacao (bloqueio) e o que so merece aviso. */
 export function validatePublication({
   produto, precos, promocao, cupom, mensagem, conferencia = null,
@@ -149,8 +174,9 @@ export function validatePublication({
 
   if (!precos.valido) bloqueios.push('Produto sem preco valido');
   if (produto.disponibilidade && produto.disponibilidade !== 'disponivel') bloqueios.push('Produto indisponivel');
-  if (produto.status === 'pausado') bloqueios.push('Produto pausado');
-  if (produto.status === 'expirado') bloqueios.push('Produto expirado');
+  // Qualquer status fora de "ativo" (pausado, expirado, arquivado) bloqueia;
+  // antes "arquivado" passava.
+  if (produto.status && produto.status !== 'ativo') bloqueios.push(`Produto ${produto.status}`);
 
   const link = produto.url_final || produto.url_afiliado || produto.url_original;
   if (!link) bloqueios.push('Produto sem link');
@@ -275,11 +301,21 @@ export async function processQueue({ limite = 10, reference = new Date(), forcar
   const agora = reference.toISOString();
   liberarEnviosTravados();
 
-  const candidatas = publicationRepository.list({
-    filters: { status: ['aguardando', 'erro'] },
-    sort: 'agendado_para ASC',
-    limit: 200,
-  });
+  // So o que pode sair agora entra na leitura. Antes vinham as 200 primeiras
+  // de 'aguardando' + 'erro', e erro definitivo (que nunca sai da tabela) ou
+  // post de grupo fechado ocupavam as 200 vagas: a fila parava sem aviso.
+  const fechados = channelRepository.listAll()
+    .filter((c) => !forcar && !channelWindowOpen(c, reference).aberto)
+    .map((c) => c.id);
+  const condicoes = [{
+    sql: "status = 'aguardando' OR (status = 'erro' AND tentativas < ? AND (proxima_tentativa IS NULL OR proxima_tentativa <= ?))",
+    params: [MAX_TENTATIVAS, agora],
+  }];
+  if (!forcar) condicoes.push({ sql: 'agendado_para IS NULL OR agendado_para <= ?', params: [agora] });
+  if (fechados.length) {
+    condicoes.push({ sql: `channel_id NOT IN (${fechados.map(() => '?').join(', ')})`, params: fechados });
+  }
+  const candidatas = publicationRepository.list({ raw: condicoes, sort: 'agendado_para ASC', limit: 200 });
 
   const resultado = { processadas: 0, enviadas: 0, erros: 0, adiadas: 0, detalhes: [] };
 
@@ -471,9 +507,13 @@ const IDADE_PARA_REVALIDAR_MS = 10 * 60000;
  */
 async function revalidarAntesDeEnviar(pub) {
   if (!pub.product_id) return { ok: true, pub };
+  // Antes da idade: produto apagado (ou pausado) 1 minuto depois de entrar na
+  // fila tambem nao pode sair — muitas vezes foi apagado justamente por erro.
+  const produto = productRepository.findById(pub.product_id);
+  if (!produto) return { ok: false, motivo: 'Produto removido depois de entrar na fila' };
+  if (produto.status !== 'ativo') return { ok: false, motivo: `Produto ${produto.status} depois de entrar na fila` };
   const idade = Date.now() - Date.parse(pub.criado_em || '');
   if (!(idade > IDADE_PARA_REVALIDAR_MS)) return { ok: true, pub };
-  if (!productRepository.findById(pub.product_id)) return { ok: false, motivo: 'Produto removido depois de entrar na fila' };
 
   const post = await buildPublication({
     product_id: pub.product_id,

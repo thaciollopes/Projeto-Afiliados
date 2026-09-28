@@ -48,7 +48,7 @@ Nada em `core/` conhece "WAHA" ou "AliExpress" pelo nome.
 ```bash
 npm start              # sobe (ou INICIAR.bat)
 npm run dev            # com --watch
-npm test               # 142 testes; o painel entra junto se o servidor estiver no ar
+npm test               # 154 testes; o painel entra junto se o servidor estiver no ar
 npm run seed           # só categorias e templates (idempotente)
 npm run health         # diagnóstico
 node scripts/reset.js --sim   # zera o banco (faz backup antes)
@@ -131,6 +131,9 @@ dinâmicos. Copie o padrão se precisar de outro teste com banco.
 | Servidor buscando URL de fora | só domínio de loja (`ehUrlDeLoja`, a cada redirecionamento). Loja/encurtador/link de afiliado se reconhecem pelo **host** (`affiliateLinkService`), nunca por regex no texto |
 | Preço de promoção | promoção inválida (pausada, vencida, futura) não entra em NADA do preço — nem "de", nem frete |
 | Post na fila | é remontado antes de sair se esperou >10 min; `isDuplicate` conta o que está na fila, não só o enviado |
+| Leitura da fila | `processQueue` filtra no SQL só o que pode sair agora (erro definitivo e grupo fechado ficam de fora); ler tudo e filtrar no JS travava a fila com 200 erros velhos |
+| Apagar produto/grupo | use `deleteProduct` / `removerCanal`: cancelam a fila e limpam o que era só deles. `repo.remove()` direto deixa post pendente e destino de campanha órfão |
+| Trava da IA | código de cupom só conta em CAIXA ALTA ("cupom abaixo" não é código); preço é conferido com e sem "R$" |
 | "Hoje" | `inicioDoDiaIso()` (meia-noite de São Paulo). Nunca `${dia}T00:00Z` — isso é 21h da véspera |
 | Rota que altera dados | requisição com `Origin` de fora é recusada em `app.js` (CSRF). Painel, extensão e localhost passam; n8n/curl não mandam Origin |
 | Painel com `APP_TOKEN` | extensão (campo Token) e n8n (`AFILIADOS_TOKEN`) mandam `x-api-token`; script novo que chama a API também precisa |

@@ -3,6 +3,7 @@
  */
 import {
   productRepository, priceHistoryRepository, alertRepository, settingRepository,
+  publicationRepository, promotionRepository, linkCanalRepository,
 } from '../repositories/index.js';
 import { calculateScore, DEFAULT_SCORE_WEIGHTS } from './pricingService.js';
 import { searchAll, getMarketplace } from '../../integrations/marketplaces/index.js';
@@ -77,8 +78,19 @@ export function updateProduct(id, patch) {
   return productRepository.update(id, produto);
 }
 
+/**
+ * Apaga o produto e o que so fazia sentido com ele. Post na fila e cancelado
+ * (nao pode sair oferta de produto que voce apagou); promocao do produto,
+ * historico de preco e links por grupo iam ficando orfaos no banco.
+ */
 export function deleteProduct(id) {
   getProduct(id);
+  for (const pub of publicationRepository.listAll({ filters: { product_id: id, status: ['aguardando', 'erro'] } })) {
+    publicationRepository.update(pub.id, { status: 'cancelado', erro: 'Produto removido' });
+  }
+  promotionRepository.removeWhere({ product_id: id });
+  priceHistoryRepository.removeWhere({ product_id: id });
+  linkCanalRepository.removeWhere({ product_id: id });
   return productRepository.remove(id);
 }
 

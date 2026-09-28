@@ -266,7 +266,17 @@ export class BaseRepository {
     return { where: clauses.length ? `WHERE ${clauses.join(' AND ')}` : '', params };
   }
 
+  /**
+   * Sempre termina em `id`: com empate (varios produtos importados no mesmo
+   * milissegundo tem o mesmo criado_em) a ordem entre paginas nao e garantida,
+   * e o listAll pulava ou repetia registros na virada de pagina.
+   */
   _buildSort(sort) {
+    const ordem = this._ordemPedida(sort);
+    return /(^|,\s*)id\b/.test(ordem) ? ordem : `${ordem}, id`;
+  }
+
+  _ordemPedida(sort) {
     if (!sort) return this.defaultSort;
     const parts = String(sort)
       .split(',')

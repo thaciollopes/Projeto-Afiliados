@@ -132,11 +132,33 @@ export const LIMPEZA_PADRAO = {
 };
 
 export function cleanupSettings() {
-  return { ...LIMPEZA_PADRAO, ...(settingRepository.get('limpeza') || {}) };
+  const salvas = settingRepository.get('limpeza') || {};
+  const regras = { ...LIMPEZA_PADRAO };
+  for (const chave of Object.keys(LIMPEZA_PADRAO)) {
+    if (!(chave in salvas)) continue;
+    if (chave === 'cache') { regras.cache = Boolean(salvas.cache); continue; }
+    const dias = Number(salvas[chave]);
+    // Valor salvo antes da validacao: invalido desliga a regra em vez de apagar tudo.
+    regras[chave] = Number.isInteger(dias) && dias >= 0 ? dias : 0;
+  }
+  return regras;
 }
 
-export function saveCleanupSettings(patch) {
-  return settingRepository.set('limpeza', { ...cleanupSettings(), ...patch });
+/**
+ * So as regras conhecidas, e so numero inteiro >= 0 (0 desliga). Um prazo
+ * negativo vira data no futuro e a limpeza apagava TODO o historico; texto
+ * quebrava a tela de limpeza ate alguem mexer no banco.
+ */
+export function saveCleanupSettings(patch = {}) {
+  const regras = cleanupSettings();
+  for (const [chave, valor] of Object.entries(patch || {})) {
+    if (!(chave in LIMPEZA_PADRAO)) continue;
+    if (chave === 'cache') { regras.cache = Boolean(valor); continue; }
+    const dias = Number(valor);
+    if (!Number.isInteger(dias) || dias < 0) throw badRequest(`${chave}: informe um numero de dias (0 desliga)`);
+    regras[chave] = dias;
+  }
+  return settingRepository.set('limpeza', regras);
 }
 
 /** @param {{dry?:boolean}} options - dry:true so conta, nao apaga. */

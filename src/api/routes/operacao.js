@@ -6,7 +6,7 @@ import { Router } from 'express';
 import { config } from '../../config/index.js';
 import { logger } from '../../core/utils/logger.js';
 import {
-  criarCanal, atualizarCanal, canaisDisponiveis, testarCanal,
+  criarCanal, atualizarCanal, removerCanal, canaisDisponiveis, testarCanal,
 } from '../../core/services/canalService.js';
 import { asyncHandler, queryOptions } from '../middleware/index.js';
 import { channelRepository, publicationRepository } from '../../core/repositories/index.js';
@@ -46,7 +46,7 @@ canaisRouter.put('/:id', asyncHandler(async (req, res) => {
 }));
 
 canaisRouter.delete('/:id', asyncHandler(async (req, res) => {
-  res.json({ removido: channelRepository.remove(req.params.id) });
+  res.json(removerCanal(req.params.id));
 }));
 
 /** Grupos e canais do WhatsApp da sessao, para o usuario escolher. */

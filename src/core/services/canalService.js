@@ -2,7 +2,9 @@
  * Cadastro de canais (grupos e canais do WhatsApp, canais/grupos do Telegram).
  * Valida na entrada o que depois quebraria em silêncio no envio.
  */
-import { channelRepository } from '../repositories/index.js';
+import {
+  channelRepository, campaignTargetRepository, publicationRepository, linkCanalRepository,
+} from '../repositories/index.js';
 import { normalizarSubId } from './shopeeLinkService.js';
 import { getWhatsAppProvider } from '../../integrations/whatsapp/index.js';
 import {
@@ -40,6 +42,22 @@ export function atualizarCanal(id, dados) {
 }
 
 /** Grupos e canais do WhatsApp em que o número pode postar. */
+/**
+ * Apaga o grupo e o que so existia por causa dele. Antes ficavam: o grupo
+ * como destino das campanhas (a campanha "rodava" sem publicar nada, sem
+ * dizer por que), os links do sub ID e os posts na fila.
+ */
+export function removerCanal(id) {
+  if (!channelRepository.findById(id)) throw notFound('Canal');
+  const cancelados = publicationRepository.listAll({ filters: { channel_id: id, status: ['aguardando', 'erro'] } });
+  for (const pub of cancelados) {
+    publicationRepository.update(pub.id, { status: 'cancelado', erro: 'Grupo removido' });
+  }
+  campaignTargetRepository.removeWhere({ channel_id: id });
+  linkCanalRepository.removeWhere({ channel_id: id });
+  return { removido: channelRepository.remove(id), posts_cancelados: cancelados.length };
+}
+
 export async function canaisDisponiveis() {
   const provider = getWhatsAppProvider();
   const grupos = await provider.listGroups();

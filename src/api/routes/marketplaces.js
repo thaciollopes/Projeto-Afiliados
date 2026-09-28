@@ -59,7 +59,7 @@ marketplacesRouter.get('/:loja', asyncHandler(async (req, res) => {
 /** Recebe o JSON do Cookie Editor (ou "nome=valor; ...") e guarda. */
 marketplacesRouter.put('/:loja/sessao', asyncHandler(async (req, res) => {
   const loja = lojaOu404(req.params.loja);
-  salvarSessao(loja.id, req.body?.cookies);
+  salvarSessao(loja.id, req.body?.cookies, { obrigatorios: loja.cookiesObrigatorios || [] });
   res.json(resumoLoja(loja));
 }));
 

@@ -246,7 +246,7 @@ async function abaLimpeza() {
       <div class="campos">
         ${campos.map(([chave, rotulo]) => `
           <div class="campo"><label>${rotulo}</label>
-            <input type="number" data-chave="${chave}" value="${dados.regras[chave] ?? 0}"></div>`).join('')}
+            <input type="number" min="0" step="1" data-chave="${chave}" value="${dados.regras[chave] ?? 0}"></div>`).join('')}
       </div>
       <h4 class="mt">Prévia</h4>
       <div class="grade g4">
