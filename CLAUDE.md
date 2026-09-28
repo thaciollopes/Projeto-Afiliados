@@ -48,7 +48,7 @@ Nada em `core/` conhece "WAHA" ou "AliExpress" pelo nome.
 ```bash
 npm start              # sobe (ou INICIAR.bat)
 npm run dev            # com --watch
-npm test               # 125 testes; o painel entra junto se o servidor estiver no ar
+npm test               # 142 testes; o painel entra junto se o servidor estiver no ar
 npm run seed           # só categorias e templates (idempotente)
 npm run health         # diagnóstico
 node scripts/reset.js --sim   # zera o banco (faz backup antes)
@@ -101,6 +101,7 @@ Se mexeu em preço, template, fila ou campanha, o teste correspondente precisa e
 | Fila, dedupe, retry, campanha | `tests/fluxo.test.js` |
 | Todas as páginas do painel | `tests/painel.test.js` (jsdom; pula se o servidor estiver parado) |
 | Manual (telas citadas existem) | `tests/manual.test.js` |
+| Bugs achados na revisão (segurança, >1000 registros, pausa) | `tests/revisao.test.js` |
 
 `tests/fluxo.test.js` usa banco temporário — define `DB_FILE` antes dos imports
 dinâmicos. Copie o padrão se precisar de outro teste com banco.
@@ -125,6 +126,14 @@ dinâmicos. Copie o padrão se precisar de outro teste com banco.
 | Reimportar produto | não pode trocar o link de afiliado gerado pelo link cru (`importProducts` preserva) |
 | Worker + n8n na mesma fila | `sendPublication` reserva a publicação (lê e marca `enviando` sem `await` no meio); não troque por algo com `await` antes do `update` |
 | Envio real em rajada | `processQueue` manda 1 envio real por vez com pausa sorteada (`ENVIO_PAUSA_MIN/MAX_SEGUNDOS`); o resto fica para o próximo ciclo |
+| `repo.list()` | para em **1000** registros (sem aviso). Quem precisa de "todos" (reaplicar tag, backup, exportar, varrer produtos) usa `listAll()` |
+| Tabela `settings` na borda | guarda cookie de loja (senha). Nunca devolva `settingRepository.all()` para tela/API/backup: use `configuracaoService` |
+| Servidor buscando URL de fora | só domínio de loja (`ehUrlDeLoja`, a cada redirecionamento). Loja/encurtador/link de afiliado se reconhecem pelo **host** (`affiliateLinkService`), nunca por regex no texto |
+| Preço de promoção | promoção inválida (pausada, vencida, futura) não entra em NADA do preço — nem "de", nem frete |
+| Post na fila | é remontado antes de sair se esperou >10 min; `isDuplicate` conta o que está na fila, não só o enviado |
+| "Hoje" | `inicioDoDiaIso()` (meia-noite de São Paulo). Nunca `${dia}T00:00Z` — isso é 21h da véspera |
+| Rota que altera dados | requisição com `Origin` de fora é recusada em `app.js` (CSRF). Painel, extensão e localhost passam; n8n/curl não mandam Origin |
+| Painel com `APP_TOKEN` | extensão (campo Token) e n8n (`AFILIADOS_TOKEN`) mandam `x-api-token`; script novo que chama a API também precisa |
 | Mudou uma tela | mude o passo em `public/js/manual/conteudo.js` junto; o produto vai ser vendido por assinatura e o manual é o suporte |
 | Coluna nova em tabela existente | `schema.sql` **e** `COLUNAS_NOVAS` em `core/db/index.js` (o `IF NOT EXISTS` não adiciona coluna em banco antigo) |
 | Webhook da WAHA | passa pelo `auth` sem token, mas exige HMAC (`WHATSAPP_WEBHOOK_CHAVE`); sem chave fica desligado |

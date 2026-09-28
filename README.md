@@ -28,7 +28,7 @@ Prefere subir tudo junto (Docker + n8n + WAHA + painel)? Use **`SUBIR-TUDO.bat`*
 
 | Arquivo | Para quê |
 |---|---|
-| `INSTALAR.bat` | Instala dependências, cria o `.env` e o banco com dados de exemplo |
+| `INSTALAR.bat` | Instala dependências, cria o `.env` e o banco (categorias e templates) |
 | `INICIAR.bat` | Sobe o painel e abre o navegador |
 | `SUBIR-TUDO.bat` | Sobe Docker + n8n + WAHA + painel de uma vez |
 | `PARAR.bat` | Encerra o painel |
@@ -43,9 +43,14 @@ Prefere subir tudo junto (Docker + n8n + WAHA + painel)? Use **`SUBIR-TUDO.bat`*
 
 ## O que o sistema faz
 
+**Lojas e links de afiliado** — sem API: o sistema usa a sua sessão (cookie) e a sua
+tag. Mercado Livre (`meli.la`) e Shopee (`s.shopee.com.br`) geram o link pela sua
+conta; Amazon leva a sua tag. O sistema **abre cada link e confere se o ID de afiliado
+que chega na loja é o seu** — link de outra conta não é publicado.
+
 **Produtos** — base central de produtos com título, preço, desconto, imagem, link de
-afiliado, categoria, avaliação, vendas e score. Busca em marketplaces, importação por
-planilha e cadastro manual.
+afiliado, categoria, avaliação, vendas e score. Busca no Mercado Livre e na Amazon,
+extensão do navegador (Shopee, Magalu e qualquer página), planilha e cadastro manual.
 
 **Preços** — o cálculo é explícito e auditável:
 `preço normal → desconto da loja → cupom → preço final`. A IA **nunca** encosta nesses
@@ -63,8 +68,12 @@ por X dias.
 (30s → 2min → 5min) e histórico completo do que foi publicado, com o preço e o cupom
 que saíram no post.
 
-**WhatsApp** — via WAHA, atrás de uma interface própria (`WhatsAppProvider`). Trocar de
-provider no futuro é mudar uma linha do `.env`.
+**WhatsApp e Telegram** — grupos e canais do WhatsApp via WAHA (com "digitando…" e
+pausa entre posts contra bloqueio) e canais/grupos do Telegram por bot oficial. Na
+Shopee, cada grupo sai com o próprio Sub ID: o relatório da loja mostra qual grupo vende.
+
+**Converter no privado** — mande um link de produto para o número de divulgação e
+receba o post pronto com o seu link de afiliado.
 
 **IA** — melhora título, descrição e chamada. Com trava: se o modelo inventar preço,
 desconto ou cupom, o sistema **remove antes de chegar no post** e registra a tentativa.
@@ -85,7 +94,8 @@ backup/restauração, limpeza automática e exportação para Excel.
           +-- Repositories -> SQLite (troca para Postgres sem mexer no resto)
           +-- WhatsAppProvider -> WAHA -> WhatsApp
           +-- AiProvider -> Claude/compatível (ou mock, sem custo)
-          +-- MarketplaceAdapter -> AliExpress, Amazon, Shopee… (um por loja)
+          +-- Telegram (bot oficial)
+          +-- Lojas -> sessão (cookie) + tag: Mercado Livre, Shopee, Amazon, Magalu
 ```
 
 O **app é dono dos dados e da fila** — ele funciona sozinho, com ou sem n8n.
@@ -98,9 +108,12 @@ Detalhes em [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 ## Documentação
 
+**Para usar:** o passo a passo de cada função está **dentro do painel** — menu
+**📖 Manual**, ou o botão **📖 Ajuda** no topo de qualquer tela.
+
 | Para você usar | Para você configurar | Para quem for programar |
 |---|---|---|
-| [GUIA_DO_USUARIO.md](docs/GUIA_DO_USUARIO.md) | [INSTALLATION.md](docs/INSTALLATION.md) | [ARCHITECTURE.md](docs/ARCHITECTURE.md) |
+| Menu 📖 Manual no painel | [INSTALLATION.md](docs/INSTALLATION.md) | [ARCHITECTURE.md](docs/ARCHITECTURE.md) |
 | [PRODUCTS.md](docs/PRODUCTS.md) | [CONFIGURATION.md](docs/CONFIGURATION.md) | [API.md](docs/API.md) |
 | [PROMOTIONS.md](docs/PROMOTIONS.md) | [WAHA.md](docs/WAHA.md) | [SECURITY.md](docs/SECURITY.md) |
 | [COUPONS.md](docs/COUPONS.md) | [N8N.md](docs/N8N.md) | [BACKUP.md](docs/BACKUP.md) |
@@ -121,12 +134,18 @@ Detalhes em [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 ## Estado atual
 
-Fase 1 (fundação) e boa parte das fases 2–5 **prontas e testadas**: painel completo,
-produtos, promoções, cupons, campanhas, fila com retry, templates, IA com trava,
-backup, limpeza, logs, status e 8 workflows de n8n.
+Fases 1 a 5 **prontas e testadas** (`npm test`): painel completo, lojas por cookie e
+tag com conferência do ID de afiliado, produtos, promoções, cupons, campanhas, fila
+com retry e revalidação de preço antes de enviar, WhatsApp e Telegram, conversor no
+privado, templates, IA com trava, manual no painel, backup, limpeza, logs, status e
+8 workflows de n8n.
 
-O que depende de você: credenciais dos marketplaces (Amazon, AliExpress, Shopee…).
-Os adapters já existem e ficam marcados como *integração pendente* até as chaves
-chegarem — o sistema **nunca inventa dados de loja**.
+O que ainda não foi testado contra os serviços de verdade (a rede de desenvolvimento
+não alcança): a geração de link da Shopee, o envio pelo Telegram e o webhook da WAHA.
+Teste cada um antes de ligar o envio real.
+
+Próximo passo para vender como assinatura: **multiusuário** (login, dados separados
+por cliente, sessão de WhatsApp por cliente, configurações hoje no `.env` indo para o
+painel). O sistema **nunca inventa dados de loja**.
 
 Roadmap completo em [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md#roadmap).

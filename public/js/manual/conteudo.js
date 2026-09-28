@@ -235,6 +235,7 @@ export const SECOES = [
           'Ligue o <strong>Modo do desenvolvedor</strong> (canto superior direito).',
           'Clique em <strong>Carregar sem compactação</strong> e escolha a pasta <code>extensao</code>.',
           'Fixe a extensão na barra (ícone do quebra-cabeça).',
+          'Se o painel pede senha, abra a extensão e preencha <strong>Token de acesso</strong> com a mesma senha (fica salvo).',
         ],
       },
       {
@@ -408,6 +409,7 @@ export const SECOES = [
           '<strong>Fila:</strong> o que está esperando. Clique em 👁️ para ler o post.',
           '<strong>Histórico e erros:</strong> o que foi enviado e o que falhou.',
           'Falhou? O sistema tenta de novo sozinho (30 s, 2 min, 5 min). O botão 🔁 força outra tentativa.',
+          'Post que ficou mais de 10 minutos esperando (grupo fechado à noite, por exemplo) é <strong>conferido de novo antes de sair</strong>: se o preço ou o cupom mudou, o texto é atualizado; se o cupom venceu ou o produto foi pausado, ele não sai e vira erro com o motivo.',
         ],
       },
       {
@@ -510,6 +512,29 @@ export const SECOES = [
   },
 
   {
+    id: 'senha',
+    icone: '🔐',
+    titulo: 'Senha do painel',
+    resumo: 'Proteger o painel (obrigatório fora do seu computador).',
+    blocos: [
+      {
+        passos: [
+          'Com senha ligada, o painel pede a senha uma vez neste navegador.',
+          'Na extensão, preencha <strong>Token de acesso</strong> com a mesma senha.',
+          'Sem senha, qualquer aparelho no mesmo Wi-Fi consegue abrir o painel e publicar.',
+        ],
+      },
+      {
+        tipo: 'admin',
+        itens: [
+          'No <code>.env</code>, <code>APP_TOKEN=</code> uma senha longa, e reiniciar.',
+          'No n8n, crie a variável <code>AFILIADOS_TOKEN</code> com o mesmo valor — sem ela os fluxos automáticos recebem "não autorizado".',
+        ],
+      },
+    ],
+  },
+
+  {
     id: 'problemas',
     icone: '❓',
     titulo: 'Problemas comuns',
@@ -517,7 +542,8 @@ export const SECOES = [
     blocos: [
       {
         itens: [
-          '<strong>Nada é enviado:</strong> está em MODO SIMULAÇÃO? A campanha está ativa? O grupo está dentro do horário?',
+          '<strong>Nada é enviado:</strong> está em MODO SIMULAÇÃO? A campanha está ativa? A campanha e o grupo estão dentro do horário e abaixo do máximo por dia? Clique em ▶️ na campanha: o aviso diz o motivo.',
+          '<strong>A extensão ou o n8n dizem "não autorizado" (401):</strong> o painel tem senha — veja "Senha do painel".',
           '<strong>"sem comissão" nos produtos do ML/Shopee:</strong> conecte a loja de novo (o cookie venceu).',
           '<strong>"ID de outra conta":</strong> o cookie conectado é de outra conta, ou a tag/ID em Minhas lojas está errada.',
           '<strong>O post saiu sem imagem:</strong> a imagem da loja falhou; o sistema manda só o texto para a oferta não se perder.',

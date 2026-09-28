@@ -36,8 +36,10 @@ E, ao lado, as portas para o mundo externo:
 
 ```
 src/integrations/
-   marketplaces/   um adapter por loja (AliExpress, Amazon, Shopee…)
+   marketplaces/   catálogo das lojas (lojas.js) + busca pela sessão (cookie.js)
    whatsapp/       WhatsAppProvider -> WahaProvider | MockProvider
+   telegram/       bot oficial (mesma interface do WhatsApp)
+   mensageiros.js  escolhe WhatsApp ou Telegram pelo cadastro do canal
    ai/             AiProvider -> Anthropic | compatível | Mock
    n8n/            cliente do n8n (status + disparo de webhook)
 ```
@@ -130,15 +132,23 @@ dry run, teste e auditoria — os três usam o mesmo caminho de código.
 | Providers e adapters | trocar WhatsApp/IA/loja não mexe em regra de negócio |
 | Guard da IA (`integrations/ai/guards.js`) | o risco real do negócio é publicar preço errado; a trava é código, não confiança |
 | Dry run ligado por padrão | primeiro erro caro seria mandar oferta errada em grupo cheio |
-| Adapter "não implementado" em vez de dado falso | sem API oficial, o painel diz *integração pendente* — nunca inventa produto |
+| Loja que não deixa buscar fica `implementado: false` | o painel diz como os produtos entram (extensão) — nunca inventa produto |
+| Link de afiliado conferido no destino | "link curto" não prova de quem é a comissão; o servidor abre o link (só domínios de loja) e lê o ID |
+| Post remontado antes de sair da fila | cupom/promoção podem vencer enquanto o post espera; preço de ontem não vai para o grupo |
 
 ---
 
 ## 7. Segurança
 
 - Segredos **só** no `.env` (fora do git). O frontend recebe apenas `publicConfig()`.
+- Cookie das lojas é senha: fica no banco, nunca volta para a tela, para a API de
+  configurações nem para o backup em JSON (`configuracaoService.js`).
 - Programas de afiliados exibem o identificador **mascarado** (`ABC1••••XYZ9`).
-- `APP_TOKEN` opcional protege painel e API quando exposto na internet.
+- `APP_TOKEN` protege painel e API (extensão e n8n mandam `x-api-token`). Sem ele e
+  com `APP_HOST=0.0.0.0`, o servidor avisa na inicialização.
+- Requisição que altera dados vinda de outra origem (site aberto no navegador) é
+  recusada — sem isso, qualquer página podia mandar formulário para `localhost:3010`.
+- O servidor só abre (conferência de link, encurtador) URLs de domínios de loja.
 - Ordenação e filtros são validados contra as colunas reais da tabela (sem injeção).
 - Detalhes em [SECURITY.md](SECURITY.md).
 
@@ -153,7 +163,8 @@ dry run, teste e auditoria — os três usam o mesmo caminho de código.
 | 3 — Campanhas | **pronta** | filtros, pesquisas salvas, loop, histórico, retry, dedupe |
 | 4 — IA | **pronta** | templates, editor com preview, geração e melhoria de texto com trava |
 | 5 — Sistema | **pronta** | backup/restauração, limpeza, logs, alertas, status, export Excel |
-| 6 — Escala | **próxima** | marketplaces reais (depende de credencial), Postgres, VPS, Redis, multiusuário |
+| 5b — Afiliado de verdade | **pronta** | lojas por cookie/tag, conferência do ID, Sub ID por grupo, Telegram, conversor no privado, anti-bloqueio, manual no painel |
+| 6 — Assinatura | **próxima** | multiusuário (login, dados por cliente, sessão de WhatsApp por cliente), configurações do `.env` no painel, Postgres, cobrança |
 
-Para a fase 6, os pontos de extensão já existem: `MarketplaceAdapter`,
-`BaseRepository` e `WhatsAppProvider`.
+Para a fase 6, os pontos de extensão já existem: `BaseRepository` (Postgres),
+`WhatsAppProvider` e `mensageiros.js` (novos canais).
