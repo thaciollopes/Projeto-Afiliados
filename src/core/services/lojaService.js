@@ -45,7 +45,7 @@ export function salvarTagDaLoja(loja, tag) {
  */
 function devolverLinksDoMercadoLivre() {
   const produtos = productRepository
-    .list({ filters: { marketplace: ['mercadolivre', 'mercadolivre-web', 'mercadolivre-cookie'] }, limit: 5000 })
+    .listAll({ filters: { marketplace: ['mercadolivre', 'mercadolivre-web', 'mercadolivre-cookie'] } })
     .filter((p) => /meli\.la\//i.test(p.url_afiliado || '') && p.url_original);
   for (const p of produtos) {
     productRepository.update(p.id, { url_afiliado: null, url_final: p.url_original });
@@ -58,7 +58,7 @@ function devolverLinksDoMercadoLivre() {
  * iria para um cadastro que você removeu). Volta para o link cru.
  */
 function tirarTagDosLinks(loja) {
-  const produtos = productRepository.list({ limit: 5000 })
+  const produtos = productRepository.listAll()
     .filter((p) => lojaBase(p.marketplace) === loja.id && p.url_afiliado);
   for (const p of produtos) {
     try {

@@ -89,7 +89,11 @@ export async function renderCampanhas() {
     const r = await tentar(() => api.post(`/campanhas/${campanha.id}/executar`, { forcar: true }));
     if (!r) return;
     if (r.enfileiradas) ok(`${r.enfileiradas} publicação(ões) na fila`);
-    else ok(`Nada enfileirado (${r.ignorado || r.ignorados?.map((i) => i.motivo).join(', ') || 'sem motivo'})`);
+    else {
+      const motivos = r.ignorado ? [r.ignorado] : [...new Set((r.ignorados || []).map((i) => i.motivo))];
+      const erros = (r.erros || []).map((e) => e.erro);
+      ok(`Nada enfileirado: ${[...motivos.map(explicarMotivo), ...erros].join('; ') || 'sem motivo'}`);
+    }
     carregar();
   }
 
@@ -246,6 +250,23 @@ export async function renderCampanhas() {
 
 function rotuloModo(modo) {
   return MODOS.find((m) => m.valor === modo)?.rotulo || modo;
+}
+
+const MOTIVOS = {
+  campanha_nao_ativa: 'a campanha está pausada',
+  fora_do_dia: 'hoje não é dia desta campanha',
+  fora_do_horario: 'fora do horário',
+  limite_diario: 'o máximo por dia já foi atingido',
+  aguardando_intervalo: 'ainda dentro do intervalo entre posts',
+  sem_canais: 'a campanha não tem grupos',
+  sem_produtos: 'nenhum produto atende aos filtros',
+  todos_ja_publicados: 'todos os produtos já foram publicados nesses grupos (ou estão na fila)',
+  lista_esgotada_campanha_encerrada: 'a lista acabou e a campanha foi encerrada (loop desligado)',
+  canal_pausado: 'o grupo está pausado',
+};
+
+function explicarMotivo(motivo) {
+  return MOTIVOS[motivo] || motivo;
 }
 
 export { erro };

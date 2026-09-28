@@ -5,24 +5,22 @@
 import { channelRepository } from '../repositories/index.js';
 import { normalizarSubId } from './shopeeLinkService.js';
 import { getWhatsAppProvider } from '../../integrations/whatsapp/index.js';
-import { mensageiroDo } from '../../integrations/mensageiros.js';
+import {
+  mensageiroDo, PROVIDERS_DE_ENVIO, PROVIDER_PADRAO, problemaNoDestino,
+} from '../../integrations/mensageiros.js';
 import { badRequest, notFound } from '../utils/errors.js';
-
-const PROVIDERS = ['waha', 'telegram'];
-
-/** Telegram aceita "@nomedocanal" ou o id numérico (canal/grupo: "-100..."). */
-const ID_TELEGRAM = /^(@[A-Za-z0-9_]{5,}|-?\d{5,})$/;
 
 export function prepararCanal(dados, atual = null) {
   const canal = { ...dados };
-  const provider = String(canal.provider ?? atual?.provider ?? 'waha').toLowerCase();
-  if (!PROVIDERS.includes(provider)) throw badRequest(`Provider "${provider}" não existe (use: ${PROVIDERS.join(', ')}).`);
+  const provider = String(canal.provider ?? atual?.provider ?? PROVIDER_PADRAO).toLowerCase();
+  if (!PROVIDERS_DE_ENVIO.includes(provider)) {
+    throw badRequest(`Provider "${provider}" não existe (use: ${PROVIDERS_DE_ENVIO.join(', ')}).`);
+  }
   canal.provider = provider;
 
   const identificador = String(canal.identificador ?? atual?.identificador ?? '').trim();
-  if (provider === 'telegram' && identificador && !ID_TELEGRAM.test(identificador)) {
-    throw badRequest('No Telegram o identificador é "@nomedocanal" ou o id numérico (ex.: -1001234567890).');
-  }
+  const problema = problemaNoDestino(provider, identificador);
+  if (problema) throw badRequest(problema);
   if (canal.identificador !== undefined) canal.identificador = identificador;
 
   // Sub ID vai na URL da Shopee: só letras e números.
@@ -32,7 +30,7 @@ export function prepararCanal(dados, atual = null) {
 
 export function criarCanal(dados) {
   if (!dados?.nome || !dados?.identificador) throw badRequest('nome e identificador sao obrigatorios');
-  return channelRepository.create(prepararCanal({ status: 'ativo', tipo: 'grupo', provider: 'waha', ...dados }));
+  return channelRepository.create(prepararCanal({ status: 'ativo', tipo: 'grupo', provider: PROVIDER_PADRAO, ...dados }));
 }
 
 export function atualizarCanal(id, dados) {

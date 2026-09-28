@@ -18,12 +18,18 @@ export function getCoupon(id) {
   return cupom;
 }
 
-export function createCoupon(data) {
-  if (!data.codigo) throw badRequest('codigo e obrigatorio');
-  if (data.tipo && !TIPOS.includes(data.tipo)) throw badRequest(`tipo deve ser um de: ${TIPOS.join(', ')}`);
-  if (['percentual', 'valor_fixo'].includes(data.tipo || 'percentual') && !data.valor_desconto) {
+/** Mesmas regras no cadastro e na edição (editar pulava todas). */
+function validarCupom({ tipo = 'percentual', valor_desconto: valor }) {
+  if (!TIPOS.includes(tipo)) throw badRequest(`tipo deve ser um de: ${TIPOS.join(', ')}`);
+  if (['percentual', 'valor_fixo'].includes(tipo) && !(Number(valor) > 0)) {
     throw badRequest('valor_desconto e obrigatorio para cupom percentual ou de valor fixo');
   }
+  if (tipo === 'percentual' && Number(valor) > 100) throw badRequest('cupom percentual nao passa de 100%');
+}
+
+export function createCoupon(data) {
+  if (!data.codigo) throw badRequest('codigo e obrigatorio');
+  validarCupom(data);
   return couponRepository.create({
     status: 'ativo',
     origem: 'proprio',
@@ -37,7 +43,8 @@ export function createCoupon(data) {
 }
 
 export function updateCoupon(id, patch) {
-  getCoupon(id);
+  const atual = getCoupon(id);
+  if (patch.tipo !== undefined || patch.valor_desconto !== undefined) validarCupom({ ...atual, ...patch });
   const dados = { ...patch };
   if (dados.codigo) dados.codigo = String(dados.codigo).trim().toUpperCase();
   return couponRepository.update(id, dados);
@@ -83,7 +90,7 @@ export function registerUse(id) {
 
 /** Roda no worker: marca expirados e abre alerta de "expira hoje". */
 export function expireCoupons(reference = new Date()) {
-  const ativos = couponRepository.list({ filters: { status: 'ativo' }, limit: 1000 });
+  const ativos = couponRepository.listAll({ filters: { status: 'ativo' } });
   let expirados = 0;
   let alertas = 0;
 
@@ -134,7 +141,7 @@ export function couponStats() {
 /** Quantos produtos cadastrados casam com as regras deste cupom. */
 export function couponReach(id) {
   const cupom = getCoupon(id);
-  const produtos = productRepository.list({ filters: { status: 'ativo' }, limit: 1000 });
+  const produtos = productRepository.listAll({ filters: { status: 'ativo' } });
   const validos = produtos.filter((p) => validateCoupon(cupom, { product: p, precoBase: Number(p.preco_atual) }).valido);
   return { total: produtos.length, aplicaveis: validos.length, produtos: validos.slice(0, 50) };
 }

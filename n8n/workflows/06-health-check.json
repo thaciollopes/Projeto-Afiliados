@@ -27,7 +27,9 @@
         "url": "={{ $env.AFILIADOS_API || 'http://host.docker.internal:3010' }}/api/sistema/status",
         "options": {
           "timeout": 120000
-        }
+        },
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "x-api-token", "value": "={{ $env.AFILIADOS_TOKEN || '' }}" }] }
       },
       "id": "b0000062-0000-4000-8000-000000000062",
       "name": "Consultar status",

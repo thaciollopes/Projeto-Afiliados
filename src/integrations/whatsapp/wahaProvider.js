@@ -189,7 +189,7 @@ export function assinaturaWebhookValida(corpoBruto, assinatura, chave) {
 
 /**
  * Evento "message" da WAHA -> mensagem no formato do sistema.
- * @returns {{id:string, de:string, texto:string, deMim:boolean, privada:boolean}|null}
+ * @returns {{id:string, sessao:string|null, de:string, texto:string, deMim:boolean, privada:boolean}|null}
  */
 export function lerMensagemDoWebhook(corpo) {
   if (corpo?.event !== 'message' || !corpo.payload) return null;
@@ -197,6 +197,8 @@ export function lerMensagemDoWebhook(corpo) {
   const de = String(p.from || '');
   return {
     id: String(p.id || ''),
+    // A resposta sai pelo MESMO numero que recebeu (pode nao ser a sessao padrao).
+    sessao: corpo.session ? String(corpo.session) : null,
     de,
     texto: String(p.body || ''),
     deMim: Boolean(p.fromMe),

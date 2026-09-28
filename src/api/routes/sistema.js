@@ -14,25 +14,22 @@ import {
   createBackup, listBackups, restoreBackup, runCleanup, cleanupSettings, saveCleanupSettings,
 } from '../../core/services/maintenanceService.js';
 import { exportToExcel, importProductsFromExcel, importarPlanilhaEnviada } from '../../core/services/excelService.js';
-import { logRepository, alertRepository, settingRepository } from '../../core/repositories/index.js';
+import { logRepository, alertRepository } from '../../core/repositories/index.js';
 import { expireCoupons } from '../../core/services/couponService.js';
 import { expirePromotions } from '../../core/services/promotionService.js';
 import { expireStaleProducts, recalculateScores } from '../../core/services/productService.js';
 import { generate } from '../../integrations/ai/index.js';
 import { badRequest } from '../../core/utils/errors.js';
+import { configuracoesSemSegredo, salvarAjustes } from '../../core/services/configuracaoService.js';
 
 export const sistemaRouter = Router();
 
 sistemaRouter.get('/config', asyncHandler(async (_req, res) => {
-  res.json({ ...publicConfig(), configuracoes: settingRepository.all() });
+  res.json({ ...publicConfig(), configuracoes: configuracoesSemSegredo() });
 }));
 
 sistemaRouter.put('/config', asyncHandler(async (req, res) => {
-  const salvos = {};
-  for (const [chave, valor] of Object.entries(req.body || {})) {
-    salvos[chave] = settingRepository.set(chave, valor);
-  }
-  res.json(salvos);
+  res.json(salvarAjustes(req.body || {}));
 }));
 
 /** COMECE AQUI: o que ja esta configurado e o que falta. */
@@ -75,7 +72,7 @@ sistemaRouter.post('/alertas/:id/lido', asyncHandler(async (req, res) => {
 }));
 
 sistemaRouter.post('/alertas/marcar-todos', asyncHandler(async (_req, res) => {
-  const naoLidos = alertRepository.list({ filters: { lido: 0 }, limit: 1000 });
+  const naoLidos = alertRepository.listAll({ filters: { lido: 0 } });
   for (const alerta of naoLidos) alertRepository.update(alerta.id, { lido: true });
   res.json({ marcados: naoLidos.length });
 }));

@@ -173,6 +173,20 @@ export class BaseRepository {
 
   list(options = {}) { return this.findAll({ limit: 1000, ...options }).rows; }
 
+  /**
+   * Todos os registros, em paginas de 1000. `list` para no teto de 1000 —
+   * quem precisa de "todos" (reaplicar tag, backup, exportar) usa este, senao
+   * os registros mais antigos ficam de fora sem aviso.
+   */
+  listAll(options = {}) {
+    const todos = [];
+    for (let offset = 0; ; offset += 1000) {
+      const { rows } = this.findAll({ ...options, limit: 1000, offset });
+      todos.push(...rows);
+      if (rows.length < 1000) return todos;
+    }
+  }
+
   count(filters = {}) {
     const { where, params } = this._buildWhere({ filters });
     const row = this.db.prepare(`SELECT COUNT(*) AS total FROM ${this.table} ${where}`).get(...params);

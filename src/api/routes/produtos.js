@@ -12,7 +12,7 @@ import { generate } from '../../integrations/ai/index.js';
 import { converterImportados } from '../../core/services/linkPorCookieService.js';
 import { listMarketplaces } from '../../integrations/marketplaces/index.js';
 import { lerProgresso } from '../../core/services/progressoBuscaService.js';
-import { situacaoDoLink } from '../../core/services/verificacaoLinkService.js';
+import { situacoesDosLinks } from '../../core/services/verificacaoLinkService.js';
 
 export const produtosRouter = Router();
 
@@ -29,7 +29,8 @@ produtosRouter.get('/', asyncHandler(async (req, res) => {
   if (req.query.avaliacao_min) filtros.avaliacao = { gte: Number(req.query.avaliacao_min) };
 
   const pagina = listProducts(queryOptions(req, filtros));
-  res.json({ ...pagina, rows: pagina.rows.map((p) => ({ ...p, situacao_link: situacaoDoLink(p) })) });
+  const situacoes = situacoesDosLinks(pagina.rows);
+  res.json({ ...pagina, rows: pagina.rows.map((p, i) => ({ ...p, situacao_link: situacoes[i] })) });
 }));
 
 produtosRouter.get('/estatisticas', asyncHandler(async (_req, res) => {
@@ -63,8 +64,9 @@ produtosRouter.post('/importar', asyncHandler(async (req, res) => {
 
   // Produto do ML/Shopee entra ja com link de afiliado, se houver sessao
   // salva. Falha aqui nao desfaz a importacao: fica o aviso de comissao.
-  const conversao = await converterImportados(produtos);
-  res.status(201).json({ ...resultado, conversao });
+  const conversao = await converterImportados(produtos, resultado.ids);
+  const { ids: _ids, ...resposta } = resultado;
+  res.status(201).json({ ...resposta, conversao });
 }));
 
 produtosRouter.post('/recalcular-score', asyncHandler(async (_req, res) => {

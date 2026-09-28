@@ -17,7 +17,7 @@ const DOMINIOS = {
 /** Cookies de analytics nao servem para nada aqui — ficam de fora. */
 const DESCARTAVEIS = /^(_ga|_gid|_gcl|_hj|_fb|_tt|_pin|_uet|_clck|_clsk|__utm|ajs_|amplitude)/i;
 
-export async function conectarLoja(loja, api) {
+export async function conectarLoja(loja, api, cabecalhos = { 'Content-Type': 'application/json' }) {
   const dominio = DOMINIOS[loja];
   if (!dominio) throw new Error(`Loja "${loja}" não suportada.`);
 
@@ -39,11 +39,12 @@ export async function conectarLoja(loja, api) {
 
   const res = await fetch(`${api}/api/marketplaces/${loja}/sessao`, {
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
+    headers: cabecalhos,
     body: JSON.stringify({ cookies: JSON.stringify(cookies) }),
   });
 
   if (!res.ok) {
+    if (res.status === 401) throw new Error('O painel pediu o token de acesso — preencha o campo "Token".');
     const detalhe = await res.text().catch(() => '');
     throw new Error(`O painel recusou (${res.status}): ${detalhe.slice(0, 120)}`);
   }

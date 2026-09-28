@@ -26,7 +26,7 @@ export async function exportToExcel(tabelas = []) {
   wb.created = new Date();
 
   for (const nome of alvos) {
-    const registros = EXPORTAVEIS[nome].list({ limit: 1000 });
+    const registros = EXPORTAVEIS[nome].listAll();
     const aba = wb.addWorksheet(nome.slice(0, 31));
     if (!registros.length) { aba.addRow(['(sem registros)']); continue; }
 
@@ -141,5 +141,6 @@ export async function importProductsFromExcel(caminhoArquivo) {
   });
 
   if (!produtos.length) throw badRequest('Nenhuma linha valida encontrada (falta a coluna "titulo"?)');
-  return { ...importProducts(produtos, 'import'), lidos: produtos.length };
+  const { ids: _ids, ...resultado } = importProducts(produtos, 'import');
+  return { ...resultado, lidos: produtos.length };
 }

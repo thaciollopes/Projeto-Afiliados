@@ -39,7 +39,9 @@
         "jsonBody": "={{ JSON.stringify($json) }}",
         "options": {
           "timeout": 120000
-        }
+        },
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "x-api-token", "value": "={{ $env.AFILIADOS_TOKEN || '' }}" }] }
       },
       "id": "b0000073-0000-4000-8000-000000000073",
       "name": "Buscar no marketplace",
@@ -59,7 +61,9 @@
         "jsonBody": "={{ JSON.stringify({ produtos: $json.produtos, origem: \"n8n\" }) }}",
         "options": {
           "timeout": 120000
-        }
+        },
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "x-api-token", "value": "={{ $env.AFILIADOS_TOKEN || '' }}" }] }
       },
       "id": "b0000074-0000-4000-8000-000000000074",
       "name": "Importar para a base",

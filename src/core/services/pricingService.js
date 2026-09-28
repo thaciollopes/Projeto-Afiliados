@@ -79,10 +79,21 @@ export function couponDiscount(coupon, precoBase) {
 export function calculatePricing({ product = null, promotion = null, coupon = null, reference = new Date() } = {}) {
   const motivos = [];
 
-  const precoPromocional = firstNumber([
-    promotion?.preco_promocional,
-    promotion ? null : undefined,
-  ]);
+  // Promocao vencida/pausada/nao iniciada nao entra — nem no preco. Antes
+  // ela so perdia o "selo" e o preco promocional seguia como preco final:
+  // promocao pausada publicava um preco que nao vale.
+  let promocaoValida = Boolean(promotion);
+  if (promotion) {
+    if (promotion.status === 'pausada') { promocaoValida = false; motivos.push('promocao_pausada'); }
+    if (promotion.status === 'expirada' || isExpired(promotion.data_fim, reference)) {
+      promocaoValida = false;
+      motivos.push('promocao_expirada');
+    }
+    if (isNotStarted(promotion.data_inicio, reference)) { promocaoValida = false; motivos.push('promocao_nao_comecou'); }
+  }
+  const promocaoUsada = promocaoValida ? promotion : null;
+
+  const precoPromocional = firstNumber([promocaoUsada?.preco_promocional]);
   const precoProduto = firstNumber([product?.preco_atual]);
 
   // Preco que o cliente paga antes do cupom
@@ -90,7 +101,7 @@ export function calculatePricing({ product = null, promotion = null, coupon = nu
 
   // Preco "de" (riscado): so existe se for maior que a base
   const precoNormalBruto = firstNumber([
-    promotion?.preco_normal,
+    promocaoUsada?.preco_normal,
     product?.preco_anterior,
   ]);
   const precoNormal = precoNormalBruto !== null && precoBase !== null && precoNormalBruto > precoBase
@@ -99,14 +110,6 @@ export function calculatePricing({ product = null, promotion = null, coupon = nu
 
   if (precoBase === null) motivos.push('sem_preco');
   if (precoBase !== null && precoBase <= 0) motivos.push('preco_invalido');
-
-  // Promocao vencida/nao iniciada nao entra
-  let promocaoValida = Boolean(promotion);
-  if (promotion) {
-    if (promotion.status === 'pausada') { promocaoValida = false; motivos.push('promocao_pausada'); }
-    if (isExpired(promotion.data_fim, reference)) { promocaoValida = false; motivos.push('promocao_expirada'); }
-    if (isNotStarted(promotion.data_inicio, reference)) { promocaoValida = false; motivos.push('promocao_nao_comecou'); }
-  }
 
   const check = coupon ? validateCoupon(coupon, { product, precoBase, reference }) : { valido: false, motivo: null };
   if (coupon && !check.valido) motivos.push(check.motivo);
@@ -125,7 +128,7 @@ export function calculatePricing({ product = null, promotion = null, coupon = nu
     : null;
 
   const freteGratis = Boolean(
-    promotion?.frete_gratis || product?.frete_gratis || cupomAtivo?.tipo === 'frete_gratis',
+    promocaoUsada?.frete_gratis || product?.frete_gratis || cupomAtivo?.tipo === 'frete_gratis',
   );
 
   return {

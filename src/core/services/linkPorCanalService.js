@@ -45,8 +45,15 @@ export async function linkParaCanal(produto, canal) {
   const subId = subIdDoCanal(canal);
   if (!subId) return null;
 
+  // Com o seu ID cadastrado, só vale link que comprovadamente saiu nele —
+  // inclusive o guardado: pode ter sido gerado com o cookie de outra conta
+  // antes de você cadastrar (ou corrigir) o ID.
+  const esperado = tagDaLoja('shopee');
+  const eDaSuaConta = (id) => !esperado || String(id || '') === String(esperado);
+
   const guardado = linkCanalRepository.findOne({ product_id: produto.id, channel_id: canal.id });
-  if (guardado && guardado.url_origem === produto.url_original && guardado.sub_id === subId) {
+  if (guardado && guardado.url_origem === produto.url_original && guardado.sub_id === subId
+      && eDaSuaConta(guardado.affiliate_id)) {
     return guardado.link;
   }
 
@@ -55,16 +62,14 @@ export async function linkParaCanal(produto, canal) {
     const item = resultados[0];
     if (!item?.link) return null;
 
-    // Mesmo cuidado da conversão normal: link de outra conta não entra.
-    const esperado = tagDaLoja('shopee');
-    if (esperado && item.affiliate_id && String(item.affiliate_id) !== String(esperado)) {
-      log.warn(`Link com sub ID saiu na conta ${item.affiliate_id}, e o seu ID é ${esperado}; usando o link normal`);
+    if (!eDaSuaConta(item.affiliate_id)) {
+      log.warn(`Link com sub ID saiu na conta ${item.affiliate_id || '(sem ID)'}, e o seu ID é ${esperado}; usando o link normal`);
       return null;
     }
 
     linkCanalRepository.upsertBy(
       { product_id: produto.id, channel_id: canal.id },
-      { sub_id: subId, url_origem: produto.url_original, link: item.link },
+      { sub_id: subId, url_origem: produto.url_original, link: item.link, affiliate_id: item.affiliate_id || null },
     );
     return item.link;
   } catch (err) {

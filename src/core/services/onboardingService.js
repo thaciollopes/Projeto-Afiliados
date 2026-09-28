@@ -7,8 +7,8 @@ import { config } from '../../config/index.js';
 import {
   productRepository, channelRepository, campaignRepository,
   affiliateRepository, publicationRepository, couponRepository, promotionRepository,
-  linkCheckRepository,
 } from '../repositories/index.js';
+import { resumoConferencias } from './verificacaoLinkService.js';
 import { getWhatsAppProvider } from '../../integrations/whatsapp/index.js';
 import { listaDeLojas } from '../../integrations/marketplaces/lojas.js';
 import { resumoSessao } from './sessaoLojaService.js';
@@ -33,8 +33,9 @@ export async function firstSteps() {
     whatsapp = await getWhatsAppProvider().status();
   } catch { /* offline conta como não configurado */ }
 
-  const linksConfirmados = linkCheckRepository.count({ confere: 1 });
-  const linksDeOutraConta = linkCheckRepository.count({ confere: 0 });
+  // Só conferências que ainda valem: link trocado ou conferido contra um ID
+  // antigo não pode deixar o passo travado para sempre.
+  const { confirmados: linksConfirmados, outra_conta: linksDeOutraConta } = resumoConferencias();
 
   const usandoWahaDeVerdade = config.whatsapp.provider === 'waha';
   const whatsappPronto = usandoWahaDeVerdade && Boolean(whatsapp.conectado);

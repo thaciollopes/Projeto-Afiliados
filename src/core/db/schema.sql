@@ -313,6 +313,7 @@ CREATE TABLE IF NOT EXISTS links_canal (
   sub_id        TEXT NOT NULL,
   url_origem    TEXT NOT NULL,
   link          TEXT NOT NULL,
+  affiliate_id  TEXT,
   criado_em     TEXT NOT NULL,
   atualizado_em TEXT NOT NULL,
   UNIQUE (product_id, channel_id)

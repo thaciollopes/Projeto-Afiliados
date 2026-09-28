@@ -20,7 +20,10 @@ services:
     container_name: afiliados-app
     restart: unless-stopped
     ports:
-      - "3010:3010"
+      # Só localhost: quem fala com o painel de fora é o nginx (docs/VPS.md).
+      # Porta publicada pelo Docker passa POR FORA do ufw — "3010:3010" deixaria
+      # o painel aberto para a internet mesmo com o firewall ligado.
+      - "127.0.0.1:3010:3010"
     env_file:
       - .env
     environment:
@@ -51,6 +54,11 @@ services:
       - WAHA_API_KEY=${WAHA_API_KEY:-}
       - WAHA_DASHBOARD_USERNAME=${WAHA_DASHBOARD_USERNAME:-admin}
       - WAHA_DASHBOARD_PASSWORD=${WAHA_DASHBOARD_PASSWORD:-troque-esta-senha}
+      # "Converter no privado": só liga com WHATSAPP_WEBHOOK_CHAVE no .env.
+      # Dentro do compose o app se chama "app" (não host.docker.internal).
+      - WHATSAPP_HOOK_URL=${WAHA_HOOK_URL_VPS:-}
+      - WHATSAPP_HOOK_EVENTS=message
+      - WHATSAPP_HOOK_HMAC_KEY=${WHATSAPP_WEBHOOK_CHAVE:-}
     volumes:
       - afiliados-waha:/app/.sessions
 
@@ -60,7 +68,8 @@ services:
     restart: unless-stopped
     profiles: ["n8n"]
     ports:
-      - "5678:5678"
+      # Idem: acesso de fora só pelo proxy (o Docker ignora o ufw).
+      - "127.0.0.1:5678:5678"
     environment:
       - GENERIC_TIMEZONE=America/Sao_Paulo
       - TZ=America/Sao_Paulo
@@ -68,6 +77,8 @@ services:
       - N8N_BLOCK_ENV_ACCESS_IN_NODE=false
       # A API do painel, vista de dentro da rede do compose:
       - AFILIADOS_API=http://app:3010
+      # Os fluxos mandam este token no cabeçalho x-api-token (painel com senha).
+      - AFILIADOS_TOKEN=${APP_TOKEN:-}
     volumes:
       - afiliados-n8n:/home/node/.n8n
 

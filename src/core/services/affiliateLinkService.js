@@ -17,14 +17,56 @@ import { logger } from '../utils/logger.js';
 
 const log = logger.child('afiliado');
 
-/** De qual loja é este link (produto, link curto ou de afiliado). */
+/** De qual loja é este link (produto, link curto ou de afiliado) — pelo host. */
 export function lojaDaUrl(url) {
-  const u = String(url || '').toLowerCase();
-  if (/mercadolivre|mercadolibre|meli\.la/.test(u)) return 'mercadolivre';
-  if (/shopee|shope\.ee|shp\.ee/.test(u)) return 'shopee';
-  if (/amazon\.com|amzn\.to|\/\/a\.co\//.test(u)) return 'amazon';
-  if (/magazineluiza|magalu|magazinevoce/.test(u)) return 'magalu';
+  const host = hostDe(url);
+  if (!host) return null;
+  const de = (...dominios) => dominios.some((d) => noDominio(host, d));
+  if (de('mercadolivre.com.br', 'mercadolivre.com', 'mercadolibre.com', 'meli.la')) return 'mercadolivre';
+  if (de('shopee.com.br', 'shope.ee', 'shp.ee')) return 'shopee';
+  if (de('amazon.com.br', 'amazon.com', 'amzn.to', 'a.co')) return 'amazon';
+  if (de('magazineluiza.com.br', 'magazinevoce.com.br')) return 'magalu';
   return null;
+}
+
+/**
+ * Domínios das lojas. É a lista do que o servidor pode ABRIR (conferir link,
+ * seguir encurtador): sem ela, um "link" apontando para a rede interna faria
+ * o servidor buscar endereços que ninguém de fora deveria alcançar.
+ */
+const DOMINIOS_DAS_LOJAS = [
+  'mercadolivre.com.br', 'mercadolivre.com', 'mercadolibre.com', 'meli.la',
+  'shopee.com.br', 'shope.ee', 'shp.ee',
+  'amazon.com.br', 'amazon.com', 'amzn.to', 'a.co',
+  'magazineluiza.com.br', 'magazinevoce.com.br',
+];
+
+/** Encurtadores que o sistema abre para descobrir o produto/ID de destino. */
+const ENCURTADORES = ['meli.la', 's.shopee.com.br', 'shope.ee', 'shp.ee', 'amzn.to', 'a.co'];
+
+function hostDe(url) {
+  try {
+    const u = new URL(String(url || ''));
+    return /^https?:$/.test(u.protocol) ? u.hostname.toLowerCase() : null;
+  } catch {
+    return null;
+  }
+}
+
+const noDominio = (host, dominio) => host === dominio || host.endsWith(`.${dominio}`);
+
+/** O link é de uma loja conhecida (pelo HOST, não por texto no meio da URL). */
+export function ehUrlDeLoja(url) {
+  const host = hostDe(url);
+  return Boolean(host && DOMINIOS_DAS_LOJAS.some((d) => noDominio(host, d)));
+}
+
+/** Link curto de loja (meli.la, s.shopee, amzn.to...) — precisa abrir para saber o destino. */
+export function ehEncurtador(url) {
+  const host = hostDe(url);
+  if (!host) return false;
+  if (ENCURTADORES.some((d) => noDominio(host, d))) return true;
+  return noDominio(host, 'mercadolivre.com') && /^\/sec\//.test(new URL(url).pathname);
 }
 
 /** "amazon-web" e "shopee-painel" são fontes da mesma loja: amazon, shopee. */
@@ -33,19 +75,19 @@ export function lojaBase(marketplace) {
 }
 
 /**
- * Domínios cujos links já carregam rastreio próprio — reescrever atrapalha.
- * (encurtadores dos programas de afiliado)
+ * Encurtadores dos programas de afiliado: o link já carrega rastreio e
+ * reescrever atrapalha. Um lugar só — esta lista existia copiada em quatro
+ * arquivos e as cópias já não batiam. (a.co fica de fora: é o "compartilhar"
+ * comum da Amazon, sem tag.)
  */
-const JA_TEM_RASTREIO = [
-  /s\.shopee\./i,
-  /shope\.ee/i,
-  /shp\.ee\//i,
-  /amzn\.to/i,
-  /mercadolivre\.com\/sec\//i,
-  /meli\.la\//i,
-  /s\.click\.aliexpress\./i,
-  /awin1\.com/i,
-];
+const HOSTS_DE_AFILIADO = ['meli.la', 's.shopee.com.br', 'shope.ee', 'shp.ee', 'amzn.to', 's.click.aliexpress.com', 'awin1.com'];
+
+export function ehLinkDeAfiliadoCurto(url) {
+  const host = hostDe(url);
+  if (!host) return false;
+  if (HOSTS_DE_AFILIADO.some((d) => noDominio(host, d))) return true;
+  return noDominio(host, 'mercadolivre.com') && /^\/sec\//.test(new URL(url).pathname);
+}
 
 /**
  * Como cada loja marca o afiliado, quando o usuário não define o parâmetro.
@@ -85,7 +127,7 @@ export function buildAffiliateUrl(produto) {
 
   // Vale para qualquer campo: o offerLink da Shopee, por exemplo, costuma
   // chegar como url_original quando vem do painel.
-  if (JA_TEM_RASTREIO.some((r) => r.test(original))) {
+  if (ehLinkDeAfiliadoCurto(original)) {
     return { url: original, aplicado: true, motivo: 'link já vem com o seu rastreio da loja' };
   }
 
@@ -172,7 +214,7 @@ export function exigeLinkDoPainel(marketplace) {
 
 /** Reaplica a etiqueta em todos os produtos — use depois de cadastrar/trocar a tag. */
 export function reaplicarEmTodos(productRepository) {
-  const produtos = productRepository.list({ limit: 1000 });
+  const produtos = productRepository.listAll();
   let atualizados = 0;
   const semPrograma = new Set();
 

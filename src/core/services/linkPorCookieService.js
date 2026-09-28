@@ -55,14 +55,19 @@ export async function converterLinkAvulso(loja, url) {
   };
 }
 
-/** Converte, na importação, os produtos das lojas por cookie que tiverem sessão. */
-export async function converterImportados(produtos = []) {
+/**
+ * Converte, na importação, SÓ os produtos que acabaram de entrar (ids) —
+ * converter a loja inteira a cada captura repetia chamadas para produtos que
+ * a loja já recusou e deixava a extensão esperando dezenas de segundos.
+ */
+export async function converterImportados(produtos = [], ids = []) {
   const lojas = [...new Set(produtos.map((p) => conversorDa(p.marketplace).loja))]
     .filter((loja) => CONVERSORES[loja] && cookiesDaSessao(loja)?.length);
+  if (!ids.length) return {};
 
   const resultado = {};
   for (const loja of lojas) {
-    resultado[loja] = await CONVERSORES[loja].converterProdutos().catch((e) => ({ erro: e.message }));
+    resultado[loja] = await CONVERSORES[loja].converterProdutos({ ids }).catch((e) => ({ erro: e.message }));
   }
   return resultado;
 }

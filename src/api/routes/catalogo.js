@@ -179,6 +179,7 @@ function exemploContexto() {
     cupom: 'EXEMPLO20', desconto_cupom: 'R$ 20,00', avaliacao: '4.8', vendas: '1200',
     link: 'https://exemplo.com/produto', imagem: '', marketplace: 'Amazon',
     categoria: 'Perfumaria', validade: '31/12/2026 23:59', frete: 'Frete gratis',
+    menor_preco: 'Menor preço que registramos em 30 dias',
   };
 }
 

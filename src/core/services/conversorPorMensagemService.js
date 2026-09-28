@@ -15,7 +15,9 @@
  */
 import { config } from '../../config/index.js';
 import { productRepository } from '../repositories/index.js';
-import { buildAffiliateUrl, lojaDaUrl } from './affiliateLinkService.js';
+import {
+  buildAffiliateUrl, lojaDaUrl, ehEncurtador, ehLinkDeAfiliadoCurto,
+} from './affiliateLinkService.js';
 import { converterLinks as converterMl } from './mercadoLivreLinkService.js';
 import { converterLinks as converterShopee, linkLimpo as linkLimpoShopee } from './shopeeLinkService.js';
 import { seguirLink, verificarLink } from './verificacaoLinkService.js';
@@ -26,7 +28,6 @@ import { logger } from '../utils/logger.js';
 const log = logger.child('conversor-privado');
 
 const MAX_LINKS_POR_MENSAGEM = 3;
-const ENCURTADOR = /(^|\/\/)(meli\.la|s\.shopee\.com\.br|shope\.ee|shp\.ee|[a-z]{2}\.shp\.ee|amzn\.to|a\.co)\//i;
 
 /** Mensagens já tratadas: a WAHA reenvia o webhook se demorar a responder. */
 const jaTratadas = new Set();
@@ -60,7 +61,7 @@ export function remetenteAutorizado(de, autorizados = config.whatsapp.autorizado
  */
 export async function linkDoProduto(url, loja) {
   let destino = url;
-  if (ENCURTADOR.test(url)) destino = (await seguirLink(url)).destino;
+  if (ehEncurtador(url)) destino = (await seguirLink(url)).destino;
 
   if (loja === 'shopee') return linkLimpoShopee(destino);
   if (loja === 'amazon') {
@@ -104,7 +105,7 @@ function produtoCadastrado(urlProduto, loja) {
   const id = idNaUrl(urlProduto);
   const normalizar = (x) => String(x || '').replace(/-/g, '').toUpperCase();
   return productRepository
-    .list({ filters: { status: 'ativo' }, limit: 5000 })
+    .listAll({ filters: { status: 'ativo' } })
     .filter((p) => lojaDoLink(p.url_original) === loja || String(p.marketplace).startsWith(loja))
     .find((p) => (id && normalizar(p.external_id).endsWith(normalizar(id)))
       || semRastreio(p.url_original) === semRastreio(urlProduto)) || null;
@@ -131,7 +132,7 @@ export async function responderLink(url) {
     const produto = produtoCadastrado(urlProduto, loja);
     if (produto) {
       // Produto na base: post completo, com o preço do cadastro.
-      if (!/meli\.la|s\.shopee|tag=/.test(produto.url_final || '')) {
+      if (!ehLinkDeAfiliadoCurto(produto.url_final) && !/[?&]tag=/.test(produto.url_final || '')) {
         productRepository.update(produto.id, { url_afiliado: link, url_final: link });
       }
       const post = await buildPublication({ product_id: produto.id });
@@ -153,7 +154,7 @@ export async function responderLink(url) {
 
 /**
  * Mensagem recebida no WhatsApp -> resposta no privado.
- * @param {{id:string, de:string, texto:string, deMim:boolean, privada:boolean}} mensagem
+ * @param {{id:string, sessao?:string, de:string, texto:string, deMim:boolean, privada:boolean}} mensagem
  * @returns {Promise<{respondida:boolean, motivo?:string, resposta?:string}>}
  */
 export async function tratarMensagemRecebida(mensagem, { enviar = null } = {}) {
@@ -183,7 +184,8 @@ export async function tratarMensagemRecebida(mensagem, { enviar = null } = {}) {
     return { respondida: false, motivo: 'dry_run', resposta };
   }
 
-  const envio = enviar || ((texto) => getWhatsAppProvider().sendMessage({ chatId: mensagem.de, texto }));
+  const envio = enviar || ((texto) => getWhatsAppProvider(mensagem.sessao ? { session: mensagem.sessao } : {})
+    .sendMessage({ chatId: mensagem.de, texto }));
   await envio(resposta);
   return { respondida: true, resposta };
 }

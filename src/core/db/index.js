@@ -39,6 +39,7 @@ export function getDb() {
  */
 const COLUNAS_NOVAS = [
   ['channels', 'sub_id', 'TEXT'],
+  ['links_canal', 'affiliate_id', 'TEXT'],
 ];
 
 function aplicarColunasNovas(conn) {

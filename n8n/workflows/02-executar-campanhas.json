@@ -28,6 +28,8 @@
         "options": {
           "timeout": 120000
         },
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "x-api-token", "value": "={{ $env.AFILIADOS_TOKEN || '' }}" }] },
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={}"

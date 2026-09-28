@@ -15,7 +15,9 @@
  * loja mudou o formato), o resultado é "não conferido" — nunca "ok" chutado.
  */
 import { linkCheckRepository, productRepository } from '../repositories/index.js';
-import { lojaBase, exigeLinkDoPainel } from './affiliateLinkService.js';
+import {
+  lojaBase, exigeLinkDoPainel, ehUrlDeLoja, ehEncurtador, ehLinkDeAfiliadoCurto,
+} from './affiliateLinkService.js';
 import { tagDaLoja } from './lojaService.js';
 import { tagDeAfiliado as tagDoMercadoLivre } from './mercadoLivreLinkService.js';
 import { nowIso } from '../utils/dates.js';
@@ -35,8 +37,6 @@ const MARCADORES = {
   shopee: [/[?&]affiliate_id=(\d+)/gi, /[?&](?:utm_source|mmp_pid)=an_(\d+)/gi],
   amazon: [/[?&]tag=([^&#"'\s<>]+)/gi],
 };
-
-const ENCURTADORES = /(^|\/\/)(meli\.la|s\.shopee\.com\.br|shope\.ee|shp\.ee|[a-z]{2}\.shp\.ee|amzn\.to|a\.co)\/|mercadolivre\.com\/sec\//i;
 
 export function lojasConferiveis() {
   return Object.keys(MARCADORES);
@@ -90,6 +90,9 @@ export async function seguirLink(url, { fetchImpl = fetch } = {}) {
   let corpo = '';
 
   for (let i = 0; i < MAX_REDIRECIONAMENTOS; i += 1) {
+    // Só domínio de loja, a cada passo: um redirecionamento para a rede
+    // interna (ou um "link" que já aponta para ela) não é buscado.
+    if (!ehUrlDeLoja(atual)) break;
     const res = await fetchImpl(atual, {
       method: 'GET',
       redirect: 'manual',
@@ -116,12 +119,13 @@ export async function verificarLink(marketplace, url, { fetchImpl = fetch } = {}
   const loja = lojaBase(marketplace);
   if (!MARCADORES[loja]) throw badRequest(`Não sei conferir links da loja "${loja}".`);
   if (!url) throw badRequest('Informe o link.');
+  if (!ehUrlDeLoja(url)) throw badRequest('Só dá para conferir link das lojas (Mercado Livre, Shopee, Amazon, Magalu).');
 
   const esperado = idEsperado(loja);
   let encontrados = idsNoTexto(loja, url);
   let destino = url;
 
-  if (!encontrados.length && ENCURTADORES.test(url)) {
+  if (!encontrados.length && ehEncurtador(url)) {
     try {
       const percurso = await seguirLink(url, { fetchImpl });
       destino = percurso.destino;
@@ -157,15 +161,47 @@ function guardar({ url, loja, esperado, encontrados, destino, confere, motivo })
  * A última conferência deste link, se ainda vale (feita contra o ID atual).
  * Síncrono: é o que a validação da fila usa.
  */
-export function conferenciaAtual(produto) {
+export function conferenciaAtual(produto, cache = null) {
   const url = produto?.url_final;
   if (!url || !MARCADORES[lojaBase(produto.marketplace)]) return null;
-  const registro = linkCheckRepository.findOne({ url });
-  if (!registro) return null;
+  const registro = cache ? cache.registro : linkCheckRepository.findOne({ url });
+  return registroVale(registro, cache ? cache.esperado : idEsperado(produto.marketplace)) ? registro : null;
+}
+
+function registroVale(registro, esperado) {
+  if (!registro) return false;
   // Falha de rede não é resultado: confere de novo na próxima vez.
-  if (registro.confere === null && !registro.destino) return null;
-  if ((registro.id_esperado || null) !== (idEsperado(produto.marketplace) || null)) return null;
-  return registro;
+  if (registro.confere === null && !registro.destino) return false;
+  // Conferido contra outro ID (tag trocada depois): não vale mais.
+  return (registro.id_esperado || null) === (esperado || null);
+}
+
+/** O ID esperado de cada loja, lido uma vez (evita reler cadastro/cookie por produto). */
+function esperadosPorLoja() {
+  const cache = new Map();
+  return (marketplace) => {
+    const loja = lojaBase(marketplace);
+    if (!cache.has(loja)) cache.set(loja, MARCADORES[loja] ? idEsperado(loja) : null);
+    return cache.get(loja);
+  };
+}
+
+/**
+ * Conferências que ainda valem, só dos produtos ativos (link trocado ou
+ * conferido contra ID antigo não conta). É o que o "Comece aqui" mostra.
+ */
+export function resumoConferencias() {
+  const esperadoDe = esperadosPorLoja();
+  const linhas = linkCheckRepository.raw(
+    `SELECT DISTINCT lc.* FROM link_checks lc
+       JOIN products p ON p.url_final = lc.url
+      WHERE p.status = 'ativo'`,
+  );
+  const validas = linhas.filter((r) => registroVale(r, esperadoDe(r.loja)));
+  return {
+    confirmados: validas.filter((r) => r.confere === 1).length,
+    outra_conta: validas.filter((r) => r.confere === 0).length,
+  };
 }
 
 /** Confere o link do produto, reaproveitando a conferência válida. */
@@ -182,7 +218,7 @@ export async function verificarProduto(produto, { forcar = false, fetchImpl = fe
 export async function verificarProdutosDaLoja(loja, { limite = 30, forcar = false, fetchImpl = fetch } = {}) {
   if (!MARCADORES[loja]) throw badRequest(`Não sei conferir links da loja "${loja}".`);
   const produtos = productRepository
-    .list({ filters: { status: 'ativo' }, limit: 1000 })
+    .listAll({ filters: { status: 'ativo' } })
     .filter((p) => lojaBase(p.marketplace) === loja && p.url_final)
     .slice(0, Math.min(Number(limite) || 30, 100));
 
@@ -195,7 +231,7 @@ export async function verificarProdutosDaLoja(loja, { limite = 30, forcar = fals
       if (r.confere === false) resumo.outra_conta += 1; else resumo.nao_conferido += 1;
       resumo.problemas.push({ produto: produto.titulo_original, id: produto.id, link: produto.url_final, motivo: r.motivo });
     }
-    if (precisaRede && ENCURTADORES.test(produto.url_final) && i < produtos.length - 1) {
+    if (precisaRede && ehEncurtador(produto.url_final) && i < produtos.length - 1) {
       await new Promise((ok) => setTimeout(ok, PAUSA_MS));
     }
   }
@@ -203,22 +239,37 @@ export async function verificarProdutosDaLoja(loja, { limite = 30, forcar = fals
   return resumo;
 }
 
-const LINK_CURTO_DE_AFILIADO = /meli\.la\/|mercadolivre\.com\/sec\/|s\.shopee\.|shope\.ee|shp\.ee|amzn\.to|s\.click\.aliexpress\./i;
-
 /**
  * Situação do link de um produto, numa palavra, para a lista de produtos:
  * ver de longe o que sai com comissão, sem abrir o preview de cada um.
  * Não vai à rede — usa a última conferência guardada.
  * @returns {{tipo:'ok'|'erro'|'alerta'|'', texto:string}}
  */
-export function situacaoDoLink(produto) {
-  const conferencia = conferenciaAtual(produto);
+export function situacaoDoLink(produto, cache = null) {
+  const conferencia = conferenciaAtual(produto, cache);
   if (conferencia?.confere === true) return { tipo: 'ok', texto: 'seu ID confirmado' };
   if (conferencia?.confere === false) return { tipo: 'erro', texto: 'ID de outra conta' };
 
-  if (exigeLinkDoPainel(produto.marketplace) && !LINK_CURTO_DE_AFILIADO.test(produto.url_final || '')) {
+  if (exigeLinkDoPainel(produto.marketplace) && !ehLinkDeAfiliadoCurto(produto.url_final)) {
     return { tipo: 'alerta', texto: 'sem comissão' };
   }
   if (produto.url_afiliado) return { tipo: '', texto: 'link de afiliado (não conferido)' };
   return { tipo: 'alerta', texto: 'sem link de afiliado' };
+}
+
+/**
+ * A situação de uma página inteira de produtos com 1 consulta de conferências
+ * e 1 leitura do ID de cada loja — em vez de várias consultas por produto.
+ */
+export function situacoesDosLinks(produtos = []) {
+  const urls = [...new Set(produtos.map((p) => p.url_final).filter(Boolean))];
+  const registros = new Map();
+  for (let i = 0; i < urls.length; i += 500) {
+    for (const r of linkCheckRepository.list({ filters: { url: urls.slice(i, i + 500) } })) registros.set(r.url, r);
+  }
+  const esperadoDe = esperadosPorLoja();
+  return produtos.map((p) => situacaoDoLink(p, {
+    registro: registros.get(p.url_final) || null,
+    esperado: esperadoDe(p.marketplace),
+  }));
 }

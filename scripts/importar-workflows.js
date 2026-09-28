@@ -88,6 +88,11 @@ try {
   console.log('');
   console.log(`  Pronto: ${criados} criados, ${atualizados} atualizados.`);
   console.log('  Todos entram DESATIVADOS — ative um por um no n8n depois de conferir.');
+  if (config.app.token) {
+    console.log('');
+    console.log('  [!] O painel tem senha (APP_TOKEN). Crie no n8n a variavel AFILIADOS_TOKEN');
+    console.log('      com o MESMO valor — sem ela todos os fluxos recebem 401.');
+  }
   console.log('');
 } catch (err) {
   console.log(`  [ERRO] ${err.message}`);

@@ -296,6 +296,79 @@ test('planilha: a segunda não sobrescreve a primeira e a loja vem do link', asy
   await assert.rejects(importarPlanilhaEnviada('abc', 'virus.exe'), /\.xlsx/);
 });
 
+function envelhecer(pubId, minutos) {
+  getDb().prepare('UPDATE publications SET criado_em = ? WHERE id = ?')
+    .run(new Date(Date.now() - minutos * 60000).toISOString(), pubId);
+}
+
+test('produto já na fila para o grupo conta como repetido (não enfileira de novo)', () => {
+  limparFila();
+  const outro = produtos.createProduct({
+    marketplace: 'demo', external_id: 'DUP-1', titulo_original: 'Na fila', preco_atual: 10, url_original: 'https://exemplo.demo/dup',
+  });
+  assert.equal(publicacoes.isDuplicate(outro.id, canal.id, 7), false);
+  pubNaFila({ product_id: outro.id });
+  assert.equal(publicacoes.isDuplicate(outro.id, canal.id, 7), true);
+  limparFila();
+});
+
+test('post parado na fila sai com o preço de AGORA (cupom que venceu não vai para o grupo)', async () => {
+  limparFila();
+  const vencido = repos.couponRepository.create({
+    codigo: 'VENCEU', tipo: 'valor_fixo', valor_desconto: 30, status: 'ativo',
+    data_fim: new Date(Date.now() - 3600000).toISOString(),
+  });
+  const pub = pubNaFila({
+    template_id: template.id, coupon_id: vencido.id, cupom_publicado: 'VENCEU',
+    preco_final_publicado: 129.9, mensagem: 'Por R$ 129,90 com o cupom VENCEU',
+  });
+  envelhecer(pub.id, 60);
+
+  const r = await publicacoes.processQueue({ limite: 5 });
+  assert.equal(r.enviadas, 1);
+  const enviada = repos.publicationRepository.findById(pub.id);
+  assert.equal(enviada.preco_final_publicado, 159.9);
+  assert.equal(enviada.cupom_publicado, null);
+  assert.doesNotMatch(enviada.mensagem, /VENCEU/);
+});
+
+test('post parado na fila de produto que foi pausado não sai', async () => {
+  limparFila();
+  const pausado = produtos.createProduct({
+    marketplace: 'demo', external_id: 'PAUSA-1', titulo_original: 'Vai ser pausado', preco_atual: 20, url_original: 'https://exemplo.demo/p',
+  });
+  const pub = pubNaFila({ product_id: pausado.id });
+  envelhecer(pub.id, 60);
+  repos.productRepository.update(pausado.id, { status: 'pausado' });
+
+  const r = await publicacoes.processQueue({ limite: 5 });
+  assert.equal(r.enviadas, 0);
+  const depois = repos.publicationRepository.findById(pub.id);
+  assert.equal(depois.status, 'erro');
+  assert.match(depois.erro, /Produto pausado/);
+});
+
+test('campanha respeita o próprio horário e o máximo por dia', () => {
+  const campanha = campanhas.createCampaign({
+    nome: 'Manhã', status: 'ativa', hora_inicio: '08:00', hora_fim: '12:00', limite_diario: 1, canais: [canal.id],
+  });
+  const vintehoras = new Date('2026-09-28T23:00:00Z'); // 20:00 em São Paulo
+  assert.equal(campanhas.canRunNow(campanha, vintehoras).motivo, 'fora_do_horario');
+
+  const dezHoras = new Date(Date.now());
+  const noHorario = { ...campanha, hora_inicio: '00:00', hora_fim: '23:59' };
+  assert.equal(campanhas.canRunNow(noHorario, dezHoras).pode, true);
+  pubNaFila({ campaign_id: campanha.id });
+  assert.equal(campanhas.canRunNow(noHorario, dezHoras).motivo, 'limite_diario');
+  limparFila();
+});
+
+test('"hoje" começa à meia-noite de São Paulo, não às 21h da véspera', async () => {
+  const { inicioDoDiaIso } = await import('../src/core/utils/dates.js');
+  assert.equal(inicioDoDiaIso(new Date('2026-09-28T01:30:00Z'), 'America/Sao_Paulo'), '2026-09-27T03:00:00.000Z');
+  assert.equal(inicioDoDiaIso(new Date('2026-09-28T12:00:00Z'), 'America/Sao_Paulo'), '2026-09-28T03:00:00.000Z');
+});
+
 test.after(() => {
   closeDb();
   for (const sufixo of ['', '-wal', '-shm']) {

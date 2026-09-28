@@ -83,6 +83,10 @@ no n8n — os fluxos a respeitam:
 Na VPS com o `docker-compose.yml` deste projeto, o valor certo é `http://app:3010`
 (já vem configurado no serviço `n8n` do compose).
 
+**Painel com senha (`APP_TOKEN`):** todos os fluxos mandam o cabeçalho `x-api-token`
+com o valor da variável `AFILIADOS_TOKEN` do n8n. Defina `AFILIADOS_TOKEN` igual ao
+`APP_TOKEN` do app — sem isso, com o painel protegido, todos os fluxos recebem 401.
+
 ---
 
 ## Disparar a coleta de produtos (fluxo 07)

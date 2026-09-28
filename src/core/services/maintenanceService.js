@@ -15,6 +15,7 @@ import {
   settingRepository, campaignTargetRepository,
 } from '../repositories/index.js';
 import { daysAgoIso, nowIso } from '../utils/dates.js';
+import { configuracoesSemSegredo } from './configuracaoService.js';
 import { logger } from '../utils/logger.js';
 import { badRequest, notFound } from '../utils/errors.js';
 
@@ -47,9 +48,10 @@ export function createBackup({ rotulo = 'manual' } = {}) {
   const arquivoDb = `${base}.db`;
   fs.copyFileSync(config.db.file, arquivoDb);
 
-  const dados = { gerado_em: nowIso(), versao: 1, configuracoes: settingRepository.all(), tabelas: {} };
+  // Cookie de loja e senha: fica so no .db, nunca no JSON "legivel".
+  const dados = { gerado_em: nowIso(), versao: 1, configuracoes: configuracoesSemSegredo(), tabelas: {} };
   for (const [nome, repo] of Object.entries(EXPORTAVEIS)) {
-    dados.tabelas[nome] = repo.list({ limit: 1000 });
+    dados.tabelas[nome] = repo.listAll();
   }
   const arquivoJson = `${base}.json`;
   fs.writeFileSync(arquivoJson, JSON.stringify(dados, null, 2), 'utf8');
