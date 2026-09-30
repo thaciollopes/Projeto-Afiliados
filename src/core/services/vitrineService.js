@@ -20,7 +20,7 @@ const CHAVE = 'vitrine';
 const PADRAO = {
   ativa: false,
   titulo: 'Achadinhos e Ofertas',
-  cor: '#e4572e',
+  cor: '#b4637a',
   logo_url: '',
   url_publica: '',
   usar_amazon_ml: true,
