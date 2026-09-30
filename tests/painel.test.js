@@ -31,6 +31,8 @@ if (!servidorNoAr) {
   globalThis.location = dom.window.location;
   globalThis.localStorage = dom.window.localStorage;
   globalThis.sessionStorage = dom.window.sessionStorage;
+  // Servidor com senha (ex.: VPS): o painel manda a senha que estiver no navegador.
+  if (process.env.APP_TOKEN) localStorage.setItem('app_token', process.env.APP_TOKEN);
   globalThis.Node = dom.window.Node;
   globalThis.HTMLElement = dom.window.HTMLElement;
   globalThis.prompt = () => null;
