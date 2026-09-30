@@ -216,7 +216,7 @@ async function abaBackup() {
 
   caixa.querySelector('#exportar').onclick = async () => {
     const r = await tentar(() => api.post('/sistema/exportar', {}));
-    if (r) { ok('Planilha gerada'); window.open(r.download, '_blank'); }
+    if (r) { ok('Planilha gerada'); window.open(api.comToken(r.download), '_blank'); }
   };
 
   return caixa;

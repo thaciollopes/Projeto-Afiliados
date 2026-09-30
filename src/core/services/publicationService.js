@@ -286,8 +286,11 @@ export async function processQueue({ limite = 10, reference = new Date(), forcar
   const agora = reference.toISOString();
   liberarEnviosTravados();
 
+  // Erro definitivo fica com status "erro" para sempre: sem tirar ele aqui,
+  // 200 falhas antigas ocupavam o lote inteiro e a fila parava sem aviso.
   const candidatas = publicationRepository.list({
     filters: { status: ['aguardando', 'erro'] },
+    raw: [{ sql: "status = 'aguardando' OR tentativas < ?", params: [MAX_TENTATIVAS] }],
     sort: 'agendado_para ASC',
     limit: 200,
   });
@@ -420,7 +423,9 @@ export async function sendPublication(pub, canal = null) {
     conferido = await revalidarAntesDeEnviar({ ...pub, ...atual });
   } catch (err) {
     // Falha inesperada ao remontar: tenta de novo depois, sem enviar agora.
-    marcarErro(atual, `Nao consegui conferir o post antes de enviar: ${err.message}`, false);
+    // Na ultima tentativa vira definitivo, senao esgota sem gerar alerta.
+    const definitivo = Number(atual.tentativas || 0) + 1 >= MAX_TENTATIVAS;
+    marcarErro(atual, `Nao consegui conferir o post antes de enviar: ${err.message}`, definitivo);
     return { ok: false, erro: err.message };
   }
   if (!conferido.ok) {

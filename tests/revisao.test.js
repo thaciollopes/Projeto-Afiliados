@@ -20,6 +20,7 @@ const { getDb, closeDb } = await import('../src/core/db/index.js');
 const repos = await import('../src/core/repositories/index.js');
 const { config } = await import('../src/config/index.js');
 const publicacoes = await import('../src/core/services/publicationService.js');
+const campanhas = await import('../src/core/services/campaignService.js');
 const verificacao = await import('../src/core/services/verificacaoLinkService.js');
 const { ehUrlDeLoja, ehEncurtador, ehLinkDeAfiliadoCurto, lojaDaUrl } = await import('../src/core/services/affiliateLinkService.js');
 const { salvarTagDaLoja } = await import('../src/core/services/lojaService.js');
@@ -170,6 +171,48 @@ test('a lista de produtos mostra a mesma situação, lendo tudo de uma vez', () 
 test('webhook: a resposta sai pela sessão da WAHA que recebeu a mensagem', () => {
   const m = lerMensagemDoWebhook({ event: 'message', session: 'divulgacao', payload: { id: 'x', from: '5511@c.us', body: 'oi' } });
   assert.equal(m.sessao, 'divulgacao');
+});
+
+// ----------------------------------------------------- fila e campanha ---
+
+test('200 erros definitivos antigos não travam a fila: o post novo sai', async () => {
+  const canal = repos.channelRepository.create({
+    nome: 'Fila', identificador: '2@g.us', status: 'ativo', hora_inicio: '00:00', hora_fim: '23:59', limite_diario: 1000,
+  });
+  const produto = repos.productRepository.create({ marketplace: 'demo', titulo_original: 'Y', preco_atual: 10, status: 'ativo' });
+  const velho = new Date(Date.now() - 86400000).toISOString();
+  for (let i = 0; i < 200; i += 1) {
+    repos.publicationRepository.create({
+      channel_id: canal.id, product_id: produto.id, mensagem: 'falhou', status: 'erro',
+      tentativas: publicacoes.MAX_TENTATIVAS, agendado_para: velho,
+    });
+  }
+  const nova = repos.publicationRepository.create({
+    channel_id: canal.id, product_id: produto.id, mensagem: 'oferta nova', status: 'aguardando',
+    tentativas: 0, dry_run: true, agendado_para: new Date(Date.now() - 1000).toISOString(),
+  });
+  await publicacoes.processQueue({ limite: 10 });
+  assert.equal(repos.publicationRepository.findById(nova.id).status, 'enviado');
+});
+
+test('campanha pula produto bloqueado em vez de travar nele a cada ciclo', async () => {
+  repos.templateRepository.create({ nome: 'T', corpo: '{titulo} por {preco_final} {link}', ativo: true, padrao: true });
+  const canal = repos.channelRepository.create({
+    nome: 'Camp', identificador: '3@g.us', status: 'ativo', hora_inicio: '00:00', hora_fim: '23:59', limite_diario: 100,
+  });
+  const semPreco = repos.productRepository.create({
+    marketplace: 'demo', titulo_original: 'Sem preço', status: 'ativo', disponibilidade: 'disponivel', url_original: 'https://exemplo.demo/a',
+  });
+  const bom = repos.productRepository.create({
+    marketplace: 'demo', titulo_original: 'Bom', preco_atual: 50, status: 'ativo', disponibilidade: 'disponivel', url_original: 'https://exemplo.demo/b',
+  });
+  const campanha = campanhas.createCampaign({
+    nome: 'Pula bloqueado', modo: 'manual', status: 'ativa', produto_ids: [semPreco.id, bom.id], canais: [canal.id],
+  });
+  const r = await campanhas.runCampaign(campanha, { forcar: true });
+  assert.equal(r.enfileiradas, 1);
+  const fila = repos.publicationRepository.list({ filters: { channel_id: canal.id } });
+  assert.equal(fila[0].product_id, bom.id);
 });
 
 test.after(() => {

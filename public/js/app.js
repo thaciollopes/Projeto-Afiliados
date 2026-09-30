@@ -99,10 +99,6 @@ async function carregarConfig() {
     document.getElementById('chip-dry').hidden = !estado.config.dryRun;
     document.getElementById('versao').textContent = estado.config.env === 'production' ? 'prod' : 'dev';
   } catch (e) {
-    if (e.status === 401) {
-      const token = prompt('Este painel exige token de acesso (APP_TOKEN do .env):');
-      if (token) { api.setToken(token); location.reload(); return; }
-    }
     erro(`Não consegui falar com o servidor: ${e.message}`);
   }
 }

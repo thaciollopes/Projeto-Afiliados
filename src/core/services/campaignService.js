@@ -20,6 +20,9 @@ import { notFound, badRequest } from '../utils/errors.js';
 
 const log = logger.child('campanha');
 
+/** Quantos produtos a campanha tenta por grupo quando o primeiro esta bloqueado. */
+const TENTATIVAS_POR_CANAL = 5;
+
 export const MODOS = [
   'manual', 'automatica', 'pesquisa', 'categoria', 'palavras',
   'promocoes', 'cupons', 'ofertas_do_dia',
@@ -253,9 +256,9 @@ export async function runCampaign(campanha, { reference = new Date(), forcar = f
     }
 
     const dias = Number(campanha.nao_repetir_dias ?? 7);
-    const produto = candidatos.find((p) => !isDuplicate(p.id, canal.id, dias));
+    const livres = candidatos.filter((p) => !isDuplicate(p.id, canal.id, dias));
 
-    if (!produto) {
+    if (!livres.length) {
       // Loop desligado + lista esgotada = campanha cumpriu seu papel.
       if (!campanha.loop) {
         campaignRepository.update(campanha.id, { status: 'encerrada' });
@@ -266,20 +269,26 @@ export async function runCampaign(campanha, { reference = new Date(), forcar = f
       continue;
     }
 
-    try {
-      await enqueue({
-        product_id: produto.id,
-        channel_id: canal.id,
-        campaign_id: campanha.id,
-        template_id: campanha.template_id || null,
-        usar_ia: Boolean(campanha.usar_ia),
-        nao_repetir_dias: dias,
-        origem: 'campanha',
-      });
-      campaignTargetRepository.update(alvo.id, { ultimo_envio: nowIso() });
-      resultado.enfileiradas += 1;
-    } catch (err) {
-      resultado.erros.push({ canal: canal.nome, produto: produto.id, erro: err.message });
+    // Produto bloqueado (sem preco, link de outra conta...) nao pode travar o
+    // grupo: antes a campanha escolhia o mesmo primeiro da lista a cada ciclo.
+    // Limite de tentativas porque cada uma pode ir a rede conferir o link.
+    for (const produto of livres.slice(0, TENTATIVAS_POR_CANAL)) {
+      try {
+        await enqueue({
+          product_id: produto.id,
+          channel_id: canal.id,
+          campaign_id: campanha.id,
+          template_id: campanha.template_id || null,
+          usar_ia: Boolean(campanha.usar_ia),
+          nao_repetir_dias: dias,
+          origem: 'campanha',
+        });
+        campaignTargetRepository.update(alvo.id, { ultimo_envio: nowIso() });
+        resultado.enfileiradas += 1;
+        break;
+      } catch (err) {
+        resultado.erros.push({ canal: canal.nome, produto: produto.id, erro: err.message });
+      }
     }
   }
 
