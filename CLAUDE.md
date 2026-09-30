@@ -9,6 +9,14 @@ Este arquivo é sobre *como mexer no projeto*.
 
 ---
 
+## Produção (VPS) — leia antes de mudar algo que vai para o ar
+
+Roda na **VPS 143.95.218.15** (container `afiliados`); a vitrine pública é
+**https://awaydev.com.br/ofertas** (Cv-App, Hostinger), alimentada por `sincronizarVitrine`.
+Mude aqui, teste, e publique com
+`C:\Projeto\vps\scripts\pc\4-publicar-na-vps.ps1 -Servico afiliados`.
+Detalhes: `docs/PRODUCAO.md`. Guia geral: `C:\Projeto\vps\GUIA-DO-DIA-A-DIA.md`.
+
 ## Regra de ouro
 
 > O app é dono dos **dados** e da **fila**. O n8n **orquestra**.

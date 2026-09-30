@@ -1,5 +1,8 @@
 # Subir para uma VPS
 
+> **Este é o guia genérico de 2026-09.** A VPS de verdade foi montada com os dois projetos juntos
+> (Ranch Life + afiliados): veja `docs/PRODUCAO.md` e `C:\Projeto\vps\GUIA-DO-DIA-A-DIA.md`.
+
 O projeto já nasceu pronto para isso: sem passo de build, sem dependência compilada,
 banco em arquivo e tudo configurável por `.env`.
 
