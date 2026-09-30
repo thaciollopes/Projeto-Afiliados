@@ -66,6 +66,8 @@ export class MarketplaceAdapter {
       imagem_principal: raw.imagem ?? raw.image ?? null,
       imagens: raw.imagens ?? [],
       url_original: raw.url ?? null,
+      // Loja com API oficial (Shopee) ja entrega o link de afiliado pronto.
+      url_afiliado: raw.url_afiliado ?? null,
       preco_atual: numberOrNull(raw.preco ?? raw.price),
       preco_anterior: numberOrNull(raw.preco_anterior ?? raw.original_price),
       moeda: raw.moeda ?? 'BRL',

@@ -88,6 +88,13 @@ export class WahaProvider {
   }
 
   async startSession() {
+    // Sessao que ja existe (ex.: FAILED depois que o QR expirou) nao aceita
+    // "start" — a WAHA devolve 422. So o restart gera um QR novo.
+    const nome = encodeURIComponent(this.session);
+    const atual = await this.request(`/api/sessions/${nome}`, { timeoutMs: 8000 }).catch(() => null);
+    if (atual?.status && atual.status !== 'WORKING') {
+      return this.request(`/api/sessions/${nome}/restart`, { method: 'POST' });
+    }
     return this.request('/api/sessions/start', {
       method: 'POST',
       body: { name: this.session },
@@ -97,12 +104,15 @@ export class WahaProvider {
   /** Grupos disponiveis na sessao (para cadastrar em WHATSAPP > GRUPOS). */
   async listGroups() {
     const data = await this.request(`/api/${encodeURIComponent(this.session)}/groups`, { timeoutMs: 30000 });
-    const arr = Array.isArray(data) ? data : (data?.groups || []);
+    // WEBJS devolve array; NOWEB devolve objeto indexado pelo id do grupo.
+    const arr = Array.isArray(data) ? data
+      : Array.isArray(data?.groups) ? data.groups
+      : Object.values(data || {});
     return arr.map((g) => ({
       identificador: g.id?._serialized || g.id || '',
       nome: g.name || g.subject || g.id?.user || 'sem nome',
       tipo: 'grupo',
-      participantes: g.participants?.length ?? null,
+      participantes: g.participants?.length ?? g.size ?? null,
     })).filter((g) => g.identificador);
   }
 
@@ -152,7 +162,7 @@ export class WahaProvider {
             caption: texto,
           },
         });
-        return { id: res?.id?._serialized || res?.id || 'sem-id', provider: 'waha', comImagem: true };
+        return { id: res?.id?._serialized || res?.id || res?.key?.id || 'sem-id', provider: 'waha', comImagem: true };
       } catch (err) {
         // Imagem quebrada nao pode impedir a oferta de sair: cai para texto.
         log.warn(`Falha ao enviar imagem, enviando so texto: ${err.message}`, { chatId });
@@ -164,7 +174,7 @@ export class WahaProvider {
       timeoutMs: 30000,
       body: { session: this.session, chatId, text: texto },
     });
-    return { id: res?.id?._serialized || res?.id || 'sem-id', provider: 'waha', comImagem: false };
+    return { id: res?.id?._serialized || res?.id || res?.key?.id || 'sem-id', provider: 'waha', comImagem: false };
   }
 }
 

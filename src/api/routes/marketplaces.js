@@ -17,9 +17,21 @@ import {
 import {
   verificarLink, verificarProdutosDaLoja, lojasConferiveis,
 } from '../../core/services/verificacaoLinkService.js';
+import {
+  resumoShopeeApi, salvarShopeeApi, removerShopeeApi, testarShopeeApi, importarOfertasShopee,
+} from '../../core/services/shopeeApiService.js';
+import {
+  resumoAmazonApi, salvarAmazonApi, removerAmazonApi, testarAmazonApi,
+  iniciarListaAmazon, lerTrabalhoLista,
+} from '../../core/services/amazonService.js';
 import { badRequest, notFound } from '../../core/utils/errors.js';
 
 export const marketplacesRouter = Router();
+
+const API_DA_LOJA = {
+  shopee: { resumo: resumoShopeeApi, salvar: salvarShopeeApi, remover: removerShopeeApi, testar: testarShopeeApi },
+  amazon: { resumo: resumoAmazonApi, salvar: salvarAmazonApi, remover: removerAmazonApi, testar: testarAmazonApi },
+};
 
 function lojaOu404(id) {
   const loja = LOJAS[id];
@@ -35,7 +47,11 @@ function resumoLoja(loja) {
     nome: loja.nome,
     site: loja.site,
     painel: loja.painel,
-    busca: loja.busca,
+    // Shopee passa a buscar quando a API esta configurada.
+    busca: Boolean(getMarketplace(loja.id)?.implementado),
+    api_config: loja.api || loja.apiAmazon || null,
+    api: API_DA_LOJA[loja.id]?.resumo() || null,
+    lista: Boolean(loja.lista),
     link_afiliado: loja.linkAfiliado,
     tag_config: loja.tag,
     dica_cookie: loja.dicaCookie,
@@ -83,7 +99,7 @@ marketplacesRouter.put('/:loja/tag', asyncHandler(async (req, res) => {
 /** Teste de busca: prova que a loja responde, sem gravar nada. */
 marketplacesRouter.post('/:loja/testar', asyncHandler(async (req, res) => {
   const loja = lojaOu404(req.params.loja);
-  if (!loja.busca) {
+  if (!getMarketplace(loja.id)?.implementado) {
     return res.json({ ok: false, erro: `${loja.nome} não deixa buscar automaticamente. ${loja.comoEntramProdutos}` });
   }
   try {
@@ -105,6 +121,57 @@ marketplacesRouter.post('/:loja/testar', asyncHandler(async (req, res) => {
   } catch (err) {
     return res.json({ ok: false, erro: err.message });
   }
+}));
+
+// ------------------------------------------ API oficial (Shopee Open API) --
+
+/** API oficial de cada loja: Shopee (AppID + Senha) e Amazon (Creators API). */
+function lojaComApiOu400(id) {
+  const loja = lojaOu404(id);
+  if (!API_DA_LOJA[loja.id]) throw badRequest(`${loja.nome} não tem API configurável.`);
+  return loja;
+}
+
+/** Salva a credencial e já testa; recusada não é gravada. Segredo em branco mantém o atual. */
+marketplacesRouter.put('/:loja/api', asyncHandler(async (req, res) => {
+  const loja = lojaComApiOu400(req.params.loja);
+  const r = await API_DA_LOJA[loja.id].salvar(req.body || {});
+  res.json({ ...resumoLoja(loja), teste: r.teste });
+}));
+
+marketplacesRouter.delete('/:loja/api', asyncHandler(async (req, res) => {
+  const loja = lojaComApiOu400(req.params.loja);
+  API_DA_LOJA[loja.id].remover();
+  res.json(resumoLoja(loja));
+}));
+
+marketplacesRouter.post('/:loja/api/testar', asyncHandler(async (req, res) => {
+  const loja = lojaComApiOu400(req.params.loja);
+  res.json(await API_DA_LOJA[loja.id].testar());
+}));
+
+/**
+ * Amazon: lista de links/ASINs (colada ou de um arquivo) — roda em segundo
+ * plano; a tela pergunta o andamento pelo id.
+ */
+marketplacesRouter.post('/:loja/lista', asyncHandler(async (req, res) => {
+  const loja = lojaOu404(req.params.loja);
+  if (!loja.lista) throw badRequest(`${loja.nome} não importa por lista de links.`);
+  res.status(202).json(iniciarListaAmazon(req.body?.texto));
+}));
+
+marketplacesRouter.get('/:loja/lista/:id', asyncHandler(async (req, res) => {
+  res.json(lerTrabalhoLista(req.params.id));
+}));
+
+/**
+ * Busca ofertas na API e grava direto na base — o "subir a lista" sem
+ * arquivo. O n8n pode chamar isto todo dia de manhã.
+ * body: { termo?, ordenacao?: vendas|comissao|relevancia|preco, quantidade?, comissao_min? }
+ */
+marketplacesRouter.post('/:loja/api/importar', asyncHandler(async (req, res) => {
+  if (lojaComApiOu400(req.params.loja).id !== 'shopee') throw badRequest('Importar ofertas pela API é só da Shopee.');
+  res.status(201).json(await importarOfertasShopee(req.body || {}));
 }));
 
 // ------------------- link de afiliado pela sessão (Mercado Livre, Shopee) --

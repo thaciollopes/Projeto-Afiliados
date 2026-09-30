@@ -28,6 +28,13 @@ export const config = {
     token: process.env.APP_TOKEN || '',
     timezone: process.env.TZ || 'America/Sao_Paulo',
   },
+  // Vitrine publica (o "site" dos posts): porta separada do painel, para
+  // poder publicar na internet sem expor o painel nem a API.
+  vitrine: {
+    port: int(process.env.VITRINE_PORT, 3011),
+    host: process.env.VITRINE_HOST || '0.0.0.0',
+    enabled: bool(process.env.VITRINE_ENABLED, true),
+  },
   db: {
     driver: process.env.DB_DRIVER || 'sqlite',
     file: abs(process.env.DB_FILE || './data/afiliados.db'),

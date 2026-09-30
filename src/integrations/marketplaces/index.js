@@ -4,12 +4,15 @@
  * `implementado: false` e a tela explica como os produtos entram nela.
  */
 import { LojaAdapter } from './cookie.js';
+import { ShopeeAdapter } from './shopeeAdapter.js';
+import { AmazonAdapter } from './amazonAdapter.js';
 import { listaDeLojas } from './lojas.js';
 
 const adapters = new Map();
 
 for (const loja of listaDeLojas()) {
-  adapters.set(loja.id, new LojaAdapter(loja));
+  const Adapter = { shopee: ShopeeAdapter, amazon: AmazonAdapter }[loja.id] || LojaAdapter;
+  adapters.set(loja.id, new Adapter(loja));
 }
 
 export function getMarketplace(nome) {

@@ -210,6 +210,8 @@ test('envio de verdade: pausa sorteada entre um post e outro (anti-bloqueio)', a
   config.envio.pausaMinSegundos = 60;
   config.envio.pausaMaxSegundos = 60;
   publicacoes.zerarPausaEntreEnvios();
+  // Testes anteriores postaram neste grupo; aqui o assunto e a pausa, nao o intervalo.
+  getDb().prepare('UPDATE channels SET ultimo_envio = NULL WHERE id = ?').run(canal.id);
   try {
     const outroCanal = repos.channelRepository.create({
       nome: 'Grupo 2', identificador: '222@g.us', status: 'ativo',
@@ -227,6 +229,29 @@ test('envio de verdade: pausa sorteada entre um post e outro (anti-bloqueio)', a
   } finally {
     config.runtime.dryRun = dryRunOriginal;
     Object.assign(config.envio, pausaOriginal);
+    publicacoes.zerarPausaEntreEnvios();
+    limparFila();
+  }
+});
+
+test('envio de verdade: fila respeita o intervalo do grupo mesmo no enfileirado a mão', async () => {
+  limparFila();
+  const dryRunOriginal = config.runtime.dryRun;
+  config.runtime.dryRun = false;
+  publicacoes.zerarPausaEntreEnvios();
+  try {
+    const grupo = repos.channelRepository.create({
+      nome: 'Grupo intervalo', identificador: '333@g.us', status: 'ativo',
+      hora_inicio: '00:00', hora_fim: '23:59', intervalo_minutos: 30, limite_diario: 100,
+      ultimo_envio: new Date(Date.now() - 10 * 60000).toISOString(),
+    });
+    pubNaFila({ dry_run: false, channel_id: grupo.id });
+
+    const r = await publicacoes.processQueue({ limite: 10 });
+    assert.equal(r.enviadas, 0, 'postou há 10 min, intervalo é 30');
+    assert.ok(r.detalhes.some((d) => d.motivo === 'aguardando_intervalo_grupo'));
+  } finally {
+    config.runtime.dryRun = dryRunOriginal;
     publicacoes.zerarPausaEntreEnvios();
     limparFila();
   }

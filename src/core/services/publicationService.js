@@ -13,7 +13,7 @@ import { calculatePricing } from './pricingService.js';
 import { renderPublication } from './templateService.js';
 import { activePromotionFor } from './promotionService.js';
 import { bestCouponFor, registerUse } from './couponService.js';
-import { exigeLinkDoPainel, ehLinkDeAfiliadoCurto } from './affiliateLinkService.js';
+import { exigeLinkDoPainel, ehLinkDeAfiliadoCurto, lojaBase } from './affiliateLinkService.js';
 import { podeConverter, converterProdutosDaLoja } from './linkPorCookieService.js';
 import { verificarProduto } from './verificacaoLinkService.js';
 import { seloMenorPreco } from './historicoPrecoService.js';
@@ -26,6 +26,7 @@ import {
 } from '../utils/dates.js';
 import { logger } from '../utils/logger.js';
 import { notFound, badRequest } from '../utils/errors.js';
+import { linkDaVitrine } from './vitrineService.js';
 
 const log = logger.child('publicacao');
 
@@ -109,6 +110,12 @@ export async function buildPublication({
     }
   }
 
+  // Com a vitrine ligada (Amazon/ML ou todas), o post leva para a pagina do
+  // produto no seu site; o link de afiliado fica no botao de la. A validacao
+  // abaixo continua conferindo o link de afiliado de verdade.
+  const linkVitrine = linkDaVitrine(produto);
+  if (linkVitrine) produtoParaTexto = { ...produtoParaTexto, url_final: linkVitrine };
+
   const menorPreco = seloMenorPreco(produto, { reference });
   const { mensagem } = renderPublication({
     template,
@@ -122,6 +129,9 @@ export async function buildPublication({
   const { bloqueios, avisos } = validatePublication({
     produto, precos, promocao, cupom, mensagem, conferencia,
   });
+  if (!linkVitrine && lojaBase(produto.marketplace) === 'amazon') {
+    avisos.push('Amazon: o link de associado vai direto no post. A Amazon pede que ele passe por um site seu — ligue a VITRINE.');
+  }
 
   return {
     mensagem,
@@ -136,6 +146,7 @@ export async function buildPublication({
     ia,
     conferencia_link: conferencia,
     link_canal: linkCanal,
+    link_vitrine: linkVitrine,
     pode_publicar: bloqueios.length === 0,
   };
 }
@@ -311,6 +322,16 @@ export async function processQueue({ limite = 10, reference = new Date(), forcar
     // Anti-bloqueio: um envio de verdade por vez, com pausa sorteada entre
     // eles. O que nao cabe agora fica na fila para o proximo ciclo.
     const comPausa = !pub.dry_run && !config.runtime.dryRun && precisaPausaAntiBloqueio(canal);
+    // Intervalo do grupo vale tambem para o que foi enfileirado a mao: dez
+    // produtos jogados no mesmo grupo saindo um por minuto e rajada de robo.
+    if (comPausa && !forcar && canal.intervalo_minutos && canal.ultimo_envio) {
+      const liberaEm = new Date(canal.ultimo_envio).getTime() + Number(canal.intervalo_minutos) * 60000;
+      if (reference.getTime() < liberaEm) {
+        resultado.adiadas += 1;
+        resultado.detalhes.push({ id: pub.id, status: 'adiada', motivo: 'aguardando_intervalo_grupo' });
+        continue;
+      }
+    }
     if (comPausa && !forcar && (envioRealEmAndamento || Date.now() < proximoEnvioPermitido)) {
       resultado.adiadas += 1;
       resultado.detalhes.push({ id: pub.id, status: 'adiada', motivo: 'pausa_entre_envios' });

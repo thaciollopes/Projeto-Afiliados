@@ -165,8 +165,8 @@ async function abaBackup() {
       <div class="cartao-titulo">
         <div><h3>Backups</h3><p>Cópia do banco + um JSON legível. Guardamos os 15 mais recentes.</p></div>
         <div class="linha">
-          <button class="btn" id="importar-planilha" title="Colunas: titulo, preco, preco_anterior, url, imagem, categoria">📥 Importar planilha de produtos</button>
-          <input type="file" id="arquivo-planilha" accept=".xlsx" hidden>
+          <button class="btn" id="importar-planilha" title="Planilha .xlsx (titulo, preco, url…) ou CSV do Obter link em massa da Shopee">📥 Importar planilha / CSV</button>
+          <input type="file" id="arquivo-planilha" accept=".xlsx,.csv" hidden>
           <button class="btn" id="exportar">📊 Exportar Excel</button>
           <button class="btn-primario" id="novo">💾 Fazer backup agora</button>
         </div>

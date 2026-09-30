@@ -10,6 +10,7 @@ import {
 } from './routes/operacao.js';
 import { sistemaRouter, iaRouter } from './routes/sistema.js';
 import { marketplacesRouter } from './routes/marketplaces.js';
+import { vitrineRouter } from './routes/vitrine.js';
 import { publicConfig } from '../config/index.js';
 
 export const apiRouter = Router();
@@ -26,6 +27,7 @@ apiRouter.use('/promocoes', promocoesRouter);
 apiRouter.use('/templates', templatesRouter);
 apiRouter.use('/afiliados', afiliadosRouter);
 apiRouter.use('/marketplaces', marketplacesRouter);
+apiRouter.use('/vitrine', vitrineRouter);
 apiRouter.use('/pesquisas', pesquisasRouter);
 apiRouter.use('/canais', canaisRouter);
 apiRouter.use('/campanhas', campanhasRouter);

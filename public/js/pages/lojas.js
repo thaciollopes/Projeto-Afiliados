@@ -15,6 +15,7 @@ const COMO_VIRA_LINK = {
 
 function situacao(loja) {
   const temCookie = loja.sessao.configurada && !loja.sessao.expirou;
+  if (loja.api?.configurada && loja.api.status !== 'erro') return { texto: 'pronta (API)', tipo: 'ok' };
   if (loja.link_afiliado === 'cookie') {
     return temCookie ? { texto: 'pronta', tipo: 'ok' } : { texto: 'falta o cookie', tipo: 'alerta' };
   }
@@ -125,6 +126,98 @@ function blocoBusca(loja, passo) {
     </div>`;
 }
 
+/** API oficial (Shopee): AppID + Senha. A Senha nunca volta para a tela. */
+function blocoApi(loja) {
+  const a = loja.api || {};
+  const estado = !a.configurada
+    ? etiqueta('não configurada')
+    : a.status === 'erro'
+      ? etiqueta('recusada — confira', 'erro')
+      : etiqueta(`AppID ${a.app_id} · ok`, 'ok');
+  return `
+    <div class="loja-passo">
+      <div class="linha" style="justify-content:space-between">
+        <strong>${escapar(loja.api_config.rotulo)} <span class="dica">(recomendado)</span></strong>
+        ${estado}
+      </div>
+      <p class="pequeno texto-fraco" style="margin:4px 0 8px">
+        Com a API o sistema busca ofertas sozinho, já com foto, preço, comissão e o seu link
+        s.shopee.com.br. ${escapar(loja.api_config.onde)}
+      </p>
+      <div class="grade g2">
+        <input data-api-id="${loja.id}" placeholder="AppID (número)" inputmode="numeric">
+        <input data-api-senha="${loja.id}" type="password" autocomplete="new-password"
+          placeholder="${a.configurada ? 'Senha salva — em branco mantém' : 'Senha (secret)'}">
+      </div>
+      <div class="linha" style="margin-top:8px">
+        <button class="btn-primario btn-pequeno" data-salvar-api="${loja.id}">Salvar e testar</button>
+        ${a.configurada ? `<button class="btn btn-pequeno" data-testar-api="${loja.id}">Testar de novo</button>
+        <button class="btn-perigo btn-pequeno" data-remover-api="${loja.id}">Remover</button>` : ''}
+      </div>
+      <div data-saida-api="${loja.id}" class="pequeno" style="margin-top:8px"></div>
+      ${a.configurada ? `
+      <div class="mt">
+        <strong class="pequeno">Importar ofertas agora (sem arquivo)</strong>
+        <div class="grade g2" style="margin-top:6px">
+          <input data-imp-termo="${loja.id}" placeholder="palavra-chave (em branco = mais vendidos)">
+          <select data-imp-ord="${loja.id}">
+            <option value="vendas">mais vendidos</option>
+            <option value="comissao">maior comissão</option>
+            <option value="relevancia">relevância</option>
+          </select>
+          <input data-imp-qtd="${loja.id}" type="number" value="50" min="1" max="200" title="quantidade">
+          <input data-imp-com="${loja.id}" type="number" value="10" min="0" max="100" title="comissão mínima (%)" placeholder="comissão mín. %">
+        </div>
+        <button class="btn btn-pequeno" style="margin-top:8px" data-importar-api="${loja.id}">📥 Importar ofertas</button>
+        <div data-saida-imp="${loja.id}" class="pequeno" style="margin-top:8px"></div>
+      </div>` : ''}
+    </div>`;
+}
+
+/** Amazon: lista de links/ASINs — o "subir a lista" do Divulga Links. */
+function blocoListaAmazon(loja) {
+  return `
+    <div class="loja-passo">
+      <strong>📋 Importar lista de produtos</strong>
+      <p class="pequeno texto-fraco" style="margin:4px 0 8px">
+        Cole links da Amazon (um por linha), links amzn.to ou ASINs — ou escolha um arquivo .txt/.csv.
+        O sistema completa título, preço, foto e avaliação e aplica a sua tag.
+        ${loja.api?.configurada ? 'Com a Creators API: rápido (10 por vez).' : 'Sem API: 1 produto a cada ~20 s para a Amazon não bloquear — 50 links levam uns 17 min, em segundo plano.'}
+      </p>
+      <textarea rows="4" data-lista="${loja.id}" placeholder="https://www.amazon.com.br/dp/B0XXXXXXXX&#10;https://amzn.to/xxxxx&#10;B0YYYYYYYY"></textarea>
+      <div class="linha" style="margin-top:8px">
+        <button class="btn-primario btn-pequeno" data-importar-lista="${loja.id}">📥 Importar lista</button>
+        <button class="btn btn-pequeno" data-arquivo-lista="${loja.id}">Escolher arquivo</button>
+        <input type="file" data-input-lista="${loja.id}" accept=".txt,.csv" hidden>
+      </div>
+      <div data-saida-lista="${loja.id}" class="pequeno" style="margin-top:8px"></div>
+    </div>`;
+}
+
+/** Amazon: Creators API (opcional; a Amazon libera com 10 vendas em 30 dias). */
+function blocoApiAmazon(loja) {
+  const a = loja.api || {};
+  const estado = a.configurada ? etiqueta(`${a.credential_id} · v${a.versao} · ok`, 'ok') : etiqueta('não configurada');
+  return `
+    <details class="loja-passo">
+      <summary class="linha" style="justify-content:space-between;cursor:pointer">
+        <strong>${escapar(loja.api_config.rotulo)}</strong> ${estado}
+      </summary>
+      <p class="pequeno texto-fraco" style="margin:8px 0">${escapar(loja.api_config.onde)}</p>
+      <div class="grade g2">
+        <input data-amz-id="${loja.id}" placeholder="Credential ID">
+        <input data-amz-secret="${loja.id}" type="password" autocomplete="new-password"
+          placeholder="${a.configurada ? 'Secret salvo — em branco mantém' : 'Credential Secret'}">
+        <input data-amz-versao="${loja.id}" placeholder="Versão (ex.: 2.1 ou 3.1)" value="${escapar(a.versao || '')}">
+      </div>
+      <div class="linha" style="margin-top:8px">
+        <button class="btn-primario btn-pequeno" data-salvar-amz="${loja.id}">Salvar e testar</button>
+        ${a.configurada ? `<button class="btn-perigo btn-pequeno" data-remover-api="${loja.id}">Remover</button>` : ''}
+      </div>
+      <div data-saida-api="${loja.id}" class="pequeno" style="margin-top:8px"></div>
+    </details>`;
+}
+
 /** Passos depois de tag e cookie: numerados conforme o que a loja tem. */
 function passosExtras(loja) {
   const blocos = [
@@ -159,6 +252,9 @@ function cartaoLoja(loja) {
         ${blocoTag(loja)}
         ${blocoCookie(loja)}
       </div>
+      ${loja.id === 'shopee' && loja.api_config ? blocoApi(loja) : ''}
+      ${loja.lista ? blocoListaAmazon(loja) : ''}
+      ${loja.id === 'amazon' && loja.api_config ? blocoApiAmazon(loja) : ''}
       ${passosExtras(loja)}
       <div data-saida="${loja.id}" class="pequeno" style="margin-top:8px"></div>
     </div>`;
@@ -253,6 +349,110 @@ export async function renderLojas() {
         await tentar(() => api.del(`/marketplaces/${d.removerCookie}/sessao`), 'Cookie removido');
         recarregar();
       });
+      return;
+    }
+
+    if (d.salvarApi) {
+      const lojaId = d.salvarApi;
+      const saida = tela.querySelector(`[data-saida-api="${lojaId}"]`);
+      const appId = tela.querySelector(`[data-api-id="${lojaId}"]`).value.trim();
+      const senha = tela.querySelector(`[data-api-senha="${lojaId}"]`).value.trim();
+      if (!appId) { erro('Informe o AppID.'); return; }
+      saida.innerHTML = '<span class="texto-fraco">Salvando e testando…</span>';
+      const r = await tentar(() => api.put(`/marketplaces/${lojaId}/api`, { app_id: appId, senha }));
+      if (!r) { saida.innerHTML = ''; return; }
+      saida.innerHTML = r.teste?.ok
+        ? `<span style="color:var(--ok)">✅ API funcionando: ${r.teste.encontrados} ofertas de teste</span>`
+        : `<span style="color:var(--erro)">❌ ${escapar(r.teste?.erro || 'falhou')}</span>`;
+      if (r.teste?.ok) recarregar();
+      return;
+    }
+
+    if (d.salvarAmz) {
+      const lojaId = d.salvarAmz;
+      const saida = tela.querySelector(`[data-saida-api="${lojaId}"]`);
+      const valor = (attr) => tela.querySelector(`[data-${attr}="${lojaId}"]`).value.trim();
+      saida.innerHTML = '<span class="texto-fraco">Salvando e testando…</span>';
+      const r = await tentar(() => api.put(`/marketplaces/${lojaId}/api`, {
+        credential_id: valor('amz-id'), secret: valor('amz-secret'), versao: valor('amz-versao'),
+      }));
+      if (!r) { saida.innerHTML = ''; return; }
+      saida.innerHTML = r.teste?.ok
+        ? `<span style="color:var(--ok)">✅ Creators API funcionando: ${r.teste.encontrados} produtos de teste</span>`
+        : `<span style="color:var(--erro)">❌ ${escapar(r.teste?.erro || 'falhou')}</span>`;
+      if (r.teste?.ok) recarregar();
+      return;
+    }
+
+    if (d.arquivoLista) {
+      const input = tela.querySelector(`[data-input-lista="${d.arquivoLista}"]`);
+      input.onchange = async () => {
+        const arquivo = input.files?.[0];
+        if (arquivo) tela.querySelector(`[data-lista="${d.arquivoLista}"]`).value = await arquivo.text();
+        input.value = '';
+      };
+      input.click();
+      return;
+    }
+
+    if (d.importarLista) {
+      const lojaId = d.importarLista;
+      const saida = tela.querySelector(`[data-saida-lista="${lojaId}"]`);
+      const texto = tela.querySelector(`[data-lista="${lojaId}"]`).value.trim();
+      if (!texto) { erro('Cole a lista ou escolha um arquivo.'); return; }
+      const inicio = await tentar(() => api.post(`/marketplaces/${lojaId}/lista`, { texto }));
+      if (!inicio) return;
+      botao.disabled = true;
+      const acompanhar = async () => {
+        const t = await api.get(`/marketplaces/${lojaId}/lista/${inicio.id}`).catch(() => null);
+        if (!t) { botao.disabled = false; return; }
+        saida.innerHTML = `<span class="texto-fraco">${t.fim ? '' : '⏳ '}${t.feitos} de ${t.total} · ${t.importados} importados${t.modo === 'api' ? ' (API)' : ''}</span>`
+          + (t.falhas.length ? `<br><span style="color:var(--alerta)">⚠️ ${t.falhas.length} não entraram</span>`
+            + t.falhas.slice(0, 5).map((f) => `<br><span class="texto-fraco">• ${escapar(f.item)}: ${escapar(f.motivo)}</span>`).join('') : '')
+          + (t.erro ? `<br><span style="color:var(--erro)">❌ ${escapar(t.erro)}</span>` : '');
+        if (t.fim) {
+          botao.disabled = false;
+          saida.insertAdjacentHTML('afterbegin', `<span style="color:var(--ok)">✅ Pronto: ${t.criados} novos, ${t.atualizados} atualizados · <a href="#/produtos">ver produtos</a></span><br>`);
+          return;
+        }
+        setTimeout(acompanhar, 3000);
+      };
+      acompanhar();
+      return;
+    }
+
+    if (d.testarApi) {
+      const saida = tela.querySelector(`[data-saida-api="${d.testarApi}"]`);
+      saida.innerHTML = '<span class="texto-fraco">Testando…</span>';
+      const r = await api.post(`/marketplaces/${d.testarApi}/api/testar`, {}).catch((e) => ({ ok: false, erro: e.message }));
+      saida.innerHTML = r.ok
+        ? `<span style="color:var(--ok)">✅ ${r.encontrados} ofertas</span><br>`
+          + r.exemplos.map((p) => `<span class="texto-fraco">• ${escapar(String(p.titulo).slice(0, 50))} — R$ ${escapar(p.preco)}</span>`).join('<br>')
+        : `<span style="color:var(--erro)">❌ ${escapar(r.erro)}</span>`;
+      return;
+    }
+
+    if (d.removerApi) {
+      confirmar('Remover o AppID e a Senha da API da Shopee?', async () => {
+        await tentar(() => api.del(`/marketplaces/${d.removerApi}/api`), 'API removida');
+        recarregar();
+      });
+      return;
+    }
+
+    if (d.importarApi) {
+      const lojaId = d.importarApi;
+      const saida = tela.querySelector(`[data-saida-imp="${lojaId}"]`);
+      const valor = (attr) => tela.querySelector(`[data-${attr}="${lojaId}"]`).value.trim();
+      saida.innerHTML = '<span class="texto-fraco">Buscando na Shopee…</span>';
+      const r = await api.post(`/marketplaces/${lojaId}/api/importar`, {
+        termo: valor('imp-termo'), ordenacao: valor('imp-ord'),
+        quantidade: Number(valor('imp-qtd')) || 50, comissao_min: Number(valor('imp-com')) || 0,
+      }).catch((e) => ({ erro: e.message }));
+      saida.innerHTML = r.erro
+        ? `<span style="color:var(--erro)">❌ ${escapar(r.erro)}</span>`
+        : `<span style="color:var(--ok)">✅ ${r.lidos} ofertas: ${r.criados} novas, ${r.atualizados} atualizadas</span>
+           · <a href="#/produtos">ver produtos</a>`;
       return;
     }
 

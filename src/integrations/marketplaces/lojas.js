@@ -51,7 +51,12 @@ export const LOJAS = {
       obrigatoria: true,
     },
     dicaCookie: 'Opcional na Amazon: a busca funciona mesmo sem cookie.',
-    comoEntramProdutos: 'Pela busca do sistema (PRODUTOS → Procurar) ou pela extensão.',
+    comoEntramProdutos: 'Pela busca do sistema (PRODUTOS → Procurar), por uma LISTA de links/ASINs (abaixo) ou pela extensão.',
+    lista: true,
+    apiAmazon: {
+      rotulo: 'Creators API (opcional)',
+      onde: 'associados.amazon.com.br → Ferramentas → Creators API. A Amazon só libera com 10 vendas nos últimos 30 dias; sem ela, tudo funciona pela busca e pela lista.',
+    },
     buscaUrl: (termo) => `https://www.amazon.com.br/s?k=${encodeURIComponent(termo)}`,
   },
 
@@ -70,7 +75,11 @@ export const LOJAS = {
       obrigatoria: false,
     },
     dicaCookie: 'Exporte o cookie estando logado em affiliate.shopee.com.br (página "Link personalizado") — o "SPC_EC" precisa vir junto.',
-    comoEntramProdutos: 'Pela extensão. O link vira s.shopee.com.br sozinho, pelo seu cookie do painel de afiliados.',
+    comoEntramProdutos: 'Pela API de afiliados (AppID + Senha, abaixo) o sistema busca sozinho, já com o seu link. Sem a API: CSV do "Obter link em massa" (PRODUTOS → Importar lista) ou a extensão.',
+    api: {
+      rotulo: 'API de afiliados (Open API)',
+      onde: 'affiliate.shopee.com.br → Open API: copie o AppID e a Senha. Se ainda não tiver, peça o acesso ali mesmo.',
+    },
   },
 
   magalu: {

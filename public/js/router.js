@@ -1,6 +1,7 @@
 /** Mapa de rotas do painel (hash routing, sem dependência externa). */
 import { renderComece } from './pages/comece.js';
 import { renderLojas } from './pages/lojas.js';
+import { renderVitrine } from './pages/vitrine.js';
 import { renderDashboard } from './pages/dashboard.js';
 import { renderProdutos, renderBuscar } from './pages/produtos.js';
 import { renderPromocoes, renderCupons } from './pages/promocoes.js';
@@ -79,6 +80,7 @@ export const rotas = {
   produtos: { titulo: 'Produtos', render: renderProdutos },
   buscar: { titulo: 'Procurar produtos', render: renderBuscar },
   lojas: { titulo: 'Lojas', render: renderLojas },
+  vitrine: { titulo: 'Vitrine', render: renderVitrine },
   pesquisas: { titulo: 'Pesquisas salvas', render: renderPesquisas },
   categorias: { titulo: 'Categorias', render: renderCategorias },
   promocoes: { titulo: 'Promoções', render: renderPromocoes },

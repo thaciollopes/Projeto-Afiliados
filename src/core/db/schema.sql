@@ -318,3 +318,12 @@ CREATE TABLE IF NOT EXISTS links_canal (
   atualizado_em TEXT NOT NULL,
   UNIQUE (product_id, channel_id)
 );
+
+-- Cliques no botao "Ir para a loja" da vitrine (quem veio do post e foi para a loja).
+CREATE TABLE IF NOT EXISTS vitrine_cliques (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  product_id  TEXT NOT NULL,
+  origem      TEXT,
+  em          TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_vitrine_cliques_produto ON vitrine_cliques(product_id, em);

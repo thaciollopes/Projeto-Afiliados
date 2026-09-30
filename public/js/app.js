@@ -14,6 +14,7 @@ const MENU = [
   ] },
   { grupo: 'Lojas', itens: [
     { rota: 'lojas', icone: '🏬', rotulo: 'Minhas lojas' },
+    { rota: 'vitrine', icone: '🛍️', rotulo: 'Vitrine (meu site)' },
   ] },
   { grupo: 'Produtos', itens: [
     { rota: 'produtos', icone: '📦', rotulo: 'Todos os produtos' },

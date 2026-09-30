@@ -11,6 +11,7 @@ import { runActiveCampaigns } from '../core/services/campaignService.js';
 import { processQueue } from '../core/services/publicationService.js';
 import { expireCoupons } from '../core/services/couponService.js';
 import { expirePromotions } from '../core/services/promotionService.js';
+import { sincronizarVitrine } from '../core/services/vitrineService.js';
 import { logger } from '../core/utils/logger.js';
 
 const log = logger.child('worker');
@@ -18,6 +19,8 @@ const log = logger.child('worker');
 let timer = null;
 let rodando = false;
 let ultimaManutencao = 0;
+let ultimaSincronizacao = 0;
+const SINCRONIZAR_A_CADA_MS = 10 * 60000;
 
 export function startScheduler() {
   if (!config.runtime.workerEnabled) {
@@ -52,6 +55,14 @@ export async function tick() {
 
     await runActiveCampaigns();
     await processQueue({ limite: 10 });
+
+    // Vitrine hospedada fora (awaydev.com.br/ofertas): reenvia a lista a cada 10 min.
+    // Sem endereco de sincronizacao configurado, nao faz nada.
+    if (Date.now() - ultimaSincronizacao > SINCRONIZAR_A_CADA_MS) {
+      ultimaSincronizacao = Date.now();
+      const r = await sincronizarVitrine();
+      if (!r.pulado && !r.ok) log.warn(`Vitrine externa: envio falhou (${r.erro})`);
+    }
   } catch (err) {
     log.error(`Falha no tick do worker: ${err.message}`, { stack: err.stack?.split('\n')[1]?.trim() });
   } finally {

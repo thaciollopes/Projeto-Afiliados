@@ -2,6 +2,7 @@
  * Ponto de entrada. Sobe HTTP + worker e desliga com calma no Ctrl+C.
  */
 import { createApp } from './app.js';
+import { createVitrineApp } from './vitrine/app.js';
 import { config } from './config/index.js';
 import { startScheduler, stopScheduler } from './workers/scheduler.js';
 import { closeDb } from './core/db/index.js';
@@ -33,6 +34,17 @@ const server = app.listen(config.app.port, config.app.host, () => {
   startScheduler();
 });
 
+// Vitrine em porta propria: e so ela que vai para a internet.
+let vitrine = null;
+if (config.vitrine.enabled) {
+  vitrine = createVitrineApp().listen(config.vitrine.port, config.vitrine.host, () => {
+    console.log(`   Vitrine:    http://localhost:${config.vitrine.port}  (site público dos posts)`);
+  });
+  vitrine.on('error', (err) => {
+    log.error(`Vitrine nao subiu na porta ${config.vitrine.port}: ${err.message}. Mude VITRINE_PORT no .env.`);
+  });
+}
+
 server.on('error', (err) => {
   if (err.code === 'EADDRINUSE') {
     log.error(`A porta ${config.app.port} ja esta em uso. Mude APP_PORT no .env ou feche o outro programa.`);
@@ -44,6 +56,7 @@ server.on('error', (err) => {
 function encerrar(sinal) {
   log.info(`Recebi ${sinal}, encerrando...`);
   stopScheduler();
+  vitrine?.close();
   server.close(() => {
     closeDb();
     process.exit(0);

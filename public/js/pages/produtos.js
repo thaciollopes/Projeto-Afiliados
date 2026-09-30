@@ -36,6 +36,8 @@ export async function renderProdutos() {
         <div class="linha">
           <button class="btn-primario" id="novo">+ Novo produto</button>
           <a class="btn" href="#/buscar">🔍 Procurar em lojas</a>
+          <button class="btn" id="importar-lista" title="CSV do &quot;Obter link em massa&quot; da Shopee ou planilha .xlsx">📥 Importar lista (CSV Shopee)</button>
+          <input type="file" id="arquivo-lista" accept=".csv,.xlsx" hidden>
         </div>
       </div>
       <div class="campos">
@@ -97,6 +99,20 @@ export async function renderProdutos() {
   filtros.querySelector('#aplicar').onclick = carregar;
   filtros.querySelector('#f-busca').onkeydown = (e) => { if (e.key === 'Enter') carregar(); };
   filtros.querySelector('#novo').onclick = () => abrirEditor(null, carregar);
+
+  const seletorLista = filtros.querySelector('#arquivo-lista');
+  filtros.querySelector('#importar-lista').onclick = () => seletorLista.click();
+  seletorLista.onchange = () => {
+    const arquivo = seletorLista.files?.[0];
+    if (!arquivo) return;
+    const leitor = new FileReader();
+    leitor.onload = async () => {
+      const r = await tentar(() => api.post('/sistema/importar-planilha', { arquivo: leitor.result, nome: arquivo.name }));
+      if (r) { ok(`${r.lidos} produto(s) lidos: ${r.criados} novos, ${r.atualizados} atualizados`); carregar(); }
+      seletorLista.value = '';
+    };
+    leitor.readAsDataURL(arquivo);
+  };
 
   await carregar();
   return tela;
@@ -535,7 +551,7 @@ export async function renderBuscar() {
       <p class="pequeno texto-fraco mt">
         Amazon: busca normal. Mercado Livre: o sistema varre as <strong>ofertas</strong> do ML
         (a busca comum deles cai em captcha) — escolha a categoria e, se quiser, uma palavra;
-        em branco traz as ofertas do dia. Shopee e Magalu: pela extensão, navegando na loja.
+        em branco traz as ofertas do dia. Shopee: pela API de afiliados (configure em LOJAS) ou pelo CSV do "Obter link em massa" (Todos os produtos → Importar lista). Magalu: pela extensão.
         Tags e cookies ficam em <a href="#/lojas">LOJAS</a>.
       </p>
     </div>`);
