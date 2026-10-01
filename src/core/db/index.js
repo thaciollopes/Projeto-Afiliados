@@ -42,6 +42,7 @@ const COLUNAS_NOVAS = [
   ['links_canal', 'affiliate_id', 'TEXT'],
   ['campaigns', 'produtos_por_rodada', 'INTEGER DEFAULT 1'],
   ['publications', 'lote', 'TEXT'],
+  ['products', 'preco_cupom_loja', 'REAL'],
 ];
 
 function aplicarColunasNovas(conn) {

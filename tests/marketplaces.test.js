@@ -152,6 +152,8 @@ test('ML ofertas: preço "com Cupom" não é publicado — vale o preço sem cup
   assert.equal(camiseta.preco, 49.9);
   assert.equal(camiseta.preco_anterior, 69.31);
   assert.ok(camiseta.tags.includes('cupom-ml'));
+  assert.equal(camiseta.preco_com_cupom, 29.9, 'o com cupom vai à parte, para o destaque do post');
+  assert.equal(extrairOfertasML(HTML_ML)[0].preco_com_cupom, null);
 });
 
 test('ML ofertas: palavra-chave casa sem acento e sem caixa; URL leva categoria e página', () => {

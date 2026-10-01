@@ -88,9 +88,11 @@ export function extrairOfertasML(html) {
     const comCupom = /poly-price__unit-description[^>]*>\s*com Cupom/i.test(c);
     const semCupom = valorDoRotulo(c.match(/poly-price__installments[\s\S]*?aria-label="([^"]+)"[\s\S]*?em outros meios/)?.[1]);
 
-    // "R$ 29,90 com Cupom" só vale para quem tem o cupom do ML — publicar esse
-    // valor sem o código seria preço inventado. Fica o preço sem cupom.
+    // "R$ 29,90 com Cupom" só vale para quem ativa o cupom do ML: o preço do
+    // produto é o sem cupom; o com cupom vai à parte (o post mostra como
+    // "com cupom, tem validade e pode acabar", nunca como o preço de todos).
     const preco = comCupom && semCupom ? semCupom : atual;
+    const precoComCupom = comCupom && semCupom && atual < semCupom ? atual : null;
     if (!titulo || !Number.isFinite(preco) || preco <= 0) continue;
 
     const nota = c.match(/Classificação ([\d.]+) de 5/)?.[1];
@@ -108,6 +110,7 @@ export function extrairOfertasML(html) {
       frete_gratis: /grátis/i.test(c.match(/poly-component__shipping[\s\S]{0,400}/)?.[0] || ''),
       disponibilidade: 'disponivel',
       tags: ['ofertas-ml', ...(comCupom ? ['cupom-ml'] : [])],
+      preco_com_cupom: precoComCupom,
     });
   }
   return produtos;

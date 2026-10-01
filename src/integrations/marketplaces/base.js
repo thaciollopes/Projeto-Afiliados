@@ -70,6 +70,8 @@ export class MarketplaceAdapter {
       url_afiliado: raw.url_afiliado ?? null,
       preco_atual: numberOrNull(raw.preco ?? raw.price),
       preco_anterior: numberOrNull(raw.preco_anterior ?? raw.original_price),
+      // Preço que a loja mostra "com cupom" (ML). Reimportar sem cupom zera.
+      preco_cupom_loja: numberOrNull(raw.preco_com_cupom),
       moeda: raw.moeda ?? 'BRL',
       frete_gratis: Boolean(raw.frete_gratis),
       avaliacao: numberOrNull(raw.avaliacao ?? raw.rating),

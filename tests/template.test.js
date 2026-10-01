@@ -100,11 +100,18 @@ test('selo de menor preço aparece só quando o serviço manda; senão a linha s
   assert.doesNotMatch(sem, /📉/);
 });
 
-test('oferta do ML "com Cupom" avisa no post; com cupom cadastrado, o aviso some', () => {
-  const comCupomMl = { titulo_original: 'Perfume', preco_atual: 100, tags: ['ofertas-ml', 'cupom-ml'] };
-  const precos = calculatePricing({ product: comCupomMl });
-  const texto = renderTemplate(DEFAULT_TEMPLATE_BODY, buildContext({ product: comCupomMl, pricing: precos }));
-  assert.match(texto, /Tem cupom no Mercado Livre/);
+test('oferta do ML "com Cupom": destaque com o valor do ML e aviso de validade, perto do preço', () => {
+  const comCupomMl = { titulo_original: 'Perfume', preco_atual: 100, preco_cupom_loja: 79.9, tags: ['ofertas-ml', 'cupom-ml'] };
+  const texto = renderTemplate(DEFAULT_TEMPLATE_BODY, buildContext({ product: comCupomMl, pricing: calculatePricing({ product: comCupomMl }) }));
+  assert.match(texto, /COM CUPOM DO MERCADO LIVRE: R\$\s?79,90/);
+  assert.match(texto, /tem validade e pode acabar/);
+  assert.match(texto, /Por: R\$\s?100,00/, 'o preço do post continua o sem cupom');
+  const linhas = texto.split('\n');
+  assert.equal(linhas.findIndex((l) => /COM CUPOM/.test(l)), linhas.findIndex((l) => /Por:/.test(l)) + 1, 'logo abaixo do preço');
+
+  const semValor = { ...comCupomMl, preco_cupom_loja: null };
+  const t2 = renderTemplate(DEFAULT_TEMPLATE_BODY, buildContext({ product: semValor, pricing: calculatePricing({ product: semValor }) }));
+  assert.match(t2, /TEM CUPOM NO MERCADO LIVRE/);
 
   const semTag = { titulo_original: 'Perfume', preco_atual: 100, tags: ['ofertas-ml'] };
   const outro = renderTemplate(DEFAULT_TEMPLATE_BODY, buildContext({ product: semTag, pricing: calculatePricing({ product: semTag }) }));

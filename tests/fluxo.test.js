@@ -546,6 +546,13 @@ test('"Disparar agora" não espera o intervalo do grupo', async () => {
   }
 });
 
+test('campanha prioriza produto com cupom (do ML ou cadastrado), mantendo a ordem do resto', () => {
+  const lista = [
+    { id: 'a', tags: [] }, { id: 'b', tags: ['cupom-ml'] }, { id: 'c', tags: [] }, { id: 'd', tags: ['ofertas-ml', 'cupom-ml'] },
+  ];
+  assert.deepEqual(campanhas.comCupomPrimeiro(lista).map((p) => p.id), ['b', 'd', 'a', 'c']);
+});
+
 test.after(() => {
   closeDb();
   for (const sufixo of ['', '-wal', '-shm']) {

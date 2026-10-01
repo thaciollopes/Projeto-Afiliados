@@ -287,6 +287,8 @@ export const SECOES = [
           '<strong>Promoções → + Nova promoção:</strong> produto, preço normal e promocional, validade e cupom (se houver).',
           '<strong>Cupons → + Novo cupom:</strong> código, tipo (% ou R$), compra mínima, teto, validade e onde vale.',
           'O preço final é calculado sozinho: normal → promoção → cupom.',
+          '<strong>Cupom do Mercado Livre</strong> (o "com Cupom" das ofertas): não tem código, se ativa na página do produto. O post mostra em destaque, logo abaixo do preço, o valor com cupom que o ML exibiu — com o aviso de que tem validade e pode acabar. O preço do post continua o sem cupom.',
+          'Produtos com cupom (cadastrado ou do ML) <strong>passam na frente</strong> nas campanhas: cupom vence, então sai primeiro.',
         ],
       },
       {

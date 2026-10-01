@@ -54,6 +54,7 @@ CREATE TABLE IF NOT EXISTS products (
   url_final              TEXT,
   preco_atual            REAL,
   preco_anterior         REAL,
+  preco_cupom_loja       REAL,
   desconto_percentual    REAL,
   desconto_valor         REAL,
   moeda                  TEXT DEFAULT 'BRL',

@@ -270,7 +270,7 @@ export async function runCampaign(campanha, {
   const alvos = campaignTargetRepository.list({ filters: { campaign_id: campanha.id, ativo: 1 }, limit: 50 });
   if (!alvos.length) return { ...resultado, ignorado: 'sem_canais' };
 
-  const candidatos = selectProducts(campanha, { limite: 100 });
+  const candidatos = comCupomPrimeiro(selectProducts(campanha, { limite: 100 }));
   if (!candidatos.length) return { ...resultado, ignorado: 'sem_produtos' };
 
   const porRodada = limitarPorRodada(quantidade ?? campanha.produtos_por_rodada);
@@ -361,6 +361,18 @@ export async function runCampaign(campanha, {
     log.info(`Campanha "${campanha.nome}": ${resultado.enfileiradas} publicacao(oes) na fila`);
   }
   return resultado;
+}
+
+/**
+ * Produto com cupom (cadastrado ou "com Cupom" do ML) passa na frente: cupom
+ * vence, entao vale mais postar enquanto existe. Dentro de cada grupo, mantem a
+ * ordem da campanha (sort estavel).
+ */
+export function comCupomPrimeiro(produtos) {
+  const temCupom = (p) => (p.tags || []).includes('cupom-ml') || Boolean(bestCouponFor(p));
+  return produtos.map((p) => ({ p, c: temCupom(p) }))
+    .sort((a, b) => Number(b.c) - Number(a.c))
+    .map(({ p }) => p);
 }
 
 /** Posts da campanha criados hoje (na fila ou enviados; cancelado não conta). */

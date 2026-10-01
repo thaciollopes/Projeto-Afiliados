@@ -22,7 +22,8 @@ export const VARIAVEIS_DISPONIVEIS = [
   { nome: 'desconto_valor', descricao: 'Desconto em R$' },
   { nome: 'cupom', descricao: 'Codigo do cupom' },
   { nome: 'desconto_cupom', descricao: 'Quanto o cupom abate em R$' },
-  { nome: 'cupom_loja', descricao: 'Aviso de cupom da propria loja (Mercado Livre "com Cupom"), quando nao ha cupom cadastrado' },
+  { nome: 'cupom_loja', descricao: 'Destaque do cupom do Mercado Livre ("com cupom: R$ X", com aviso de validade), quando nao ha cupom cadastrado' },
+  { nome: 'preco_cupom_loja', descricao: 'So o valor que o ML mostra "com cupom" (vazio se nao houver)' },
   { nome: 'avaliacao', descricao: 'Nota do produto' },
   { nome: 'vendas', descricao: 'Quantidade vendida' },
   { nome: 'link', descricao: 'Link de afiliado (cai no original se nao houver)' },
@@ -33,6 +34,19 @@ export const VARIAVEIS_DISPONIVEIS = [
   { nome: 'frete', descricao: 'Texto de frete (ex.: Frete gratis)' },
   { nome: 'menor_preco', descricao: 'Selo "Menor preco que registramos em 30 dias" (so com historico que prove)' },
 ];
+
+function temCupomDaLoja(product, cupom) {
+  return !cupom?.codigo && (product.tags || []).includes('cupom-ml');
+}
+
+function textoCupomDaLoja(product, cupom, money) {
+  if (!temCupomDaLoja(product, cupom)) return '';
+  const preco = Number(product.preco_cupom_loja);
+  if (preco > 0 && preco < Number(product.preco_atual)) {
+    return `*COM CUPOM DO MERCADO LIVRE: ${money(preco)}* (ative o cupom na pagina do produto; tem validade e pode acabar)`;
+  }
+  return '*TEM CUPOM NO MERCADO LIVRE* (ative na pagina do produto antes de pagar; tem validade e pode acabar)';
+}
 
 /** Monta o dicionario de variaveis a partir do produto + calculo de preco. */
 export function buildContext({
@@ -55,11 +69,11 @@ export function buildContext({
     desconto_valor: money(pricing.desconto_valor),
     cupom: cupom?.codigo || '',
     desconto_cupom: money(pricing.desconto_cupom),
-    // O ML mostra "com Cupom" na oferta mas nao publica codigo: o cupom se ativa
-    // na pagina do produto. Avisar e o que da para fazer sem inventar codigo/valor.
-    cupom_loja: !cupom?.codigo && (product.tags || []).includes('cupom-ml')
-      ? 'Tem cupom no Mercado Livre: ative na pagina do produto antes de pagar'
-      : '',
+    // O ML mostra "com Cupom" na oferta mas nao tem codigo: o cupom se ativa na
+    // pagina do produto. O valor e o que o proprio ML exibiu na coleta — sempre
+    // com o aviso de que tem validade e pode acabar (o preco do post nao muda).
+    cupom_loja: textoCupomDaLoja(product, cupom, money),
+    preco_cupom_loja: temCupomDaLoja(product, cupom) && product.preco_cupom_loja ? money(product.preco_cupom_loja) : '',
     avaliacao: product.avaliacao ? `${Number(product.avaliacao).toFixed(1)}` : '',
     vendas: product.quantidade_vendas ? String(product.quantidade_vendas) : '',
     link: product.url_final || product.url_afiliado || product.url_original || '',
@@ -150,11 +164,11 @@ export const DEFAULT_TEMPLATE_BODY = [
   '',
   '💰 De: ~{preco_anterior}~',
   '🔥 Por: {preco_final}',
+  '🎟️ {cupom_loja}',
   '📉 {menor_preco}',
   '',
   '🏷️ Cupom: *{cupom}*',
   '💸 Desconto do cupom: {desconto_cupom}',
-  '🎟️ {cupom_loja}',
   '',
   '🚚 {frete}',
   '⭐ Nota {avaliacao}',
