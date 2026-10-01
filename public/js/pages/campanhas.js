@@ -175,7 +175,7 @@ export async function renderCampanhas() {
       { nome: 'intervalo_minutos', rotulo: 'Intervalo (minutos)', tipo: 'number' },
       { nome: 'hora_inicio', rotulo: 'Hora inicial', dica: 'HH:MM' },
       { nome: 'hora_fim', rotulo: 'Hora final', dica: 'HH:MM' },
-      { nome: 'limite_diario', rotulo: 'Máximo por dia', tipo: 'number' },
+      { nome: 'limite_diario', rotulo: 'Máximo por dia', tipo: 'number', dica: 'em branco ou 0 = sem limite' },
       {
         nome: 'produtos_por_rodada', rotulo: 'Produtos por rodada', tipo: 'select', opcoes: QUANTIDADES,
         dica: 'quantos saem de uma vez a cada intervalo (com pausa de ~1 min entre eles)',
@@ -243,7 +243,8 @@ export async function renderCampanhas() {
               intervalo_minutos: Number(dados.intervalo_minutos) || 30,
               hora_inicio: dados.hora_inicio || '08:00',
               hora_fim: dados.hora_fim || '22:00',
-              limite_diario: Number(dados.limite_diario) || 20,
+              // Vazio/0 = sem limite (antes virava 20 escondido ao salvar).
+              limite_diario: Number(dados.limite_diario) || null,
               produtos_por_rodada: Number(dados.produtos_por_rodada) || 1,
               nao_repetir_dias: Number(dados.nao_repetir_dias) || 0,
               loop: dados.loop, usar_ia: dados.usar_ia,

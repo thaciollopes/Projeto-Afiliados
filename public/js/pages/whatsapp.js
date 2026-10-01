@@ -90,7 +90,7 @@ export async function renderCanais() {
     { nome: 'sessao', rotulo: 'Sessão do WAHA', dica: 'só WhatsApp; normalmente "default"' },
     { nome: 'sub_id', rotulo: 'Sub ID (Shopee)', dica: 'aparece no relatório da Shopee; vazio = gerado do nome' },
     { nome: 'intervalo_minutos', rotulo: 'Intervalo (min)', tipo: 'number' },
-    { nome: 'limite_diario', rotulo: 'Máximo por dia', tipo: 'number' },
+    { nome: 'limite_diario', rotulo: 'Máximo por dia', tipo: 'number', dica: 'em branco = sem limite' },
     { nome: 'hora_inicio', rotulo: 'Hora inicial', dica: 'HH:MM' },
     { nome: 'hora_fim', rotulo: 'Hora final', dica: 'HH:MM' },
     { nome: 'status', rotulo: 'Status', tipo: 'select', opcoes: ['ativo', 'pausado'] },
