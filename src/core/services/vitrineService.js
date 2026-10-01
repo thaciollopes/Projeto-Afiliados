@@ -16,6 +16,7 @@ import { lojaBase } from './affiliateLinkService.js';
 import { badRequest } from '../utils/errors.js';
 
 const CHAVE = 'vitrine';
+const LOJAS_VALIDAS = ['amazon', 'mercadolivre', 'shopee', 'magalu'];
 
 const PADRAO = {
   ativa: false,
@@ -23,6 +24,10 @@ const PADRAO = {
   cor: '#b4637a',
   logo_url: '',
   url_publica: '',
+  // Lojas cujo post leva para o seu site. Padrao: so a Amazon (pede site
+  // proprio); Mercado Livre vai direto para o meli.la. Os dois campos abaixo
+  // sao do formato antigo e so valem enquanto `lojas` nao foi salvo.
+  lojas: null,
   usar_amazon_ml: true,
   usar_todas: false,
   ga_tag: '',
@@ -41,6 +46,10 @@ export function salvarConfigVitrine(dados = {}) {
   const novo = { ...atual };
   for (const campo of Object.keys(PADRAO)) {
     if (dados[campo] === undefined) continue;
+    if (campo === 'lojas') {
+      novo.lojas = (Array.isArray(dados.lojas) ? dados.lojas : []).map(String).filter((l) => LOJAS_VALIDAS.includes(l));
+      continue;
+    }
     novo[campo] = typeof PADRAO[campo] === 'boolean' ? Boolean(dados[campo]) : String(dados[campo]).trim();
   }
   // Senha da sincronizacao em branco = mantem a atual (a tela nunca recebe o valor).
@@ -74,10 +83,14 @@ export function salvarConfigVitrine(dados = {}) {
 }
 
 /** O post deste produto deve levar para a vitrine? */
+/** Lojas que passam pelo site. Sem `lojas` salvo: so Amazon (pedido do dono). */
+export function lojasDaVitrine(cfg = configVitrine()) {
+  return Array.isArray(cfg.lojas) ? cfg.lojas : ['amazon'];
+}
+
 export function usaVitrine(produto, cfg = configVitrine()) {
   if (!cfg.ativa || !cfg.url_publica || !produto) return false;
-  if (cfg.usar_todas) return true;
-  return cfg.usar_amazon_ml && ['amazon', 'mercadolivre'].includes(lojaBase(produto.marketplace));
+  return lojasDaVitrine(cfg).includes(lojaBase(produto.marketplace));
 }
 
 /** Codigo curto do produto no link: "prd_ab12cd34ef" -> "ab12cd34ef". */
@@ -135,7 +148,10 @@ export function resumoCliques(dias = 7) {
 /** O que a tela recebe: nunca a senha da sincronizacao. */
 export function configParaTela(cfg = configVitrine()) {
   const { sync_token: token, ...resto } = cfg;
-  return { ...resto, sync_configurado: Boolean(cfg.sync_url && token), sync: settingRepository.get(CHAVE_SYNC) || null };
+  return {
+    ...resto, lojas: lojasDaVitrine(cfg),
+    sync_configurado: Boolean(cfg.sync_url && token), sync: settingRepository.get(CHAVE_SYNC) || null,
+  };
 }
 
 const CHAVE_SYNC = 'vitrine_sync_estado';

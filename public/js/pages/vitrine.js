@@ -1,6 +1,13 @@
 import { api } from '../api.js';
 import { el, escapar, tentar, ok, erro } from '../ui.js';
 
+const LOJAS = [
+  ['amazon', 'Amazon', '(recomendado: a Amazon pede um site seu)'],
+  ['mercadolivre', 'Mercado Livre', '(desmarcado = vai direto para o meli.la)'],
+  ['shopee', 'Shopee', ''],
+  ['magalu', 'Magazine Luiza', ''],
+];
+
 /**
  * VITRINE — o seu site dos posts. O post leva para a página do produto aqui;
  * só o botão "Ir para a loja" tem o link de afiliado (regra da Amazon).
@@ -24,7 +31,9 @@ export async function renderVitrine() {
         </div>
       </div>
       <p class="pequeno" style="margin:0">${pronta
-    ? `✅ Posts ${cfg.usar_todas ? 'de todas as lojas' : 'da Amazon e do Mercado Livre'} saem com <code>${escapar(cfg.url_publica)}p/…</code>`
+    ? (cfg.lojas?.length
+      ? `✅ Posts de <strong>${cfg.lojas.map((l) => LOJAS.find(([id]) => id === l)?.[1] || l).join(', ')}</strong> saem com <code>${escapar(cfg.url_publica)}p/…</code>. As outras lojas vão direto.`
+      : '✅ Nenhuma loja marcada: todos os posts vão direto para a loja.')
     : '⚠️ Enquanto a vitrine não estiver ligada <strong>e</strong> com endereço público, os posts saem com o link direto da loja.'}</p>
     </div>`));
 
@@ -60,8 +69,11 @@ export async function renderVitrine() {
       </details>
       <div class="mt" style="display:grid;gap:8px">
         <label><input type="checkbox" id="v-ativa" ${cfg.ativa ? 'checked' : ''}> <strong>Vitrine ligada</strong></label>
-        <label><input type="checkbox" id="v-amz" ${cfg.usar_amazon_ml ? 'checked' : ''}> Usar o meu site no link dos posts da <strong>Amazon e Mercado Livre</strong> (recomendado)</label>
-        <label><input type="checkbox" id="v-todas" ${cfg.usar_todas ? 'checked' : ''}> Usar o meu site no link de <strong>todas as lojas</strong> (Shopee também)</label>
+        <div><strong>Quais lojas levam para o seu site</strong>
+          <span class="dica">as não marcadas vão direto para a loja, com o seu link de afiliado</span></div>
+        ${LOJAS.map(([id, nome, dica]) => `
+        <label><input type="checkbox" class="v-loja" value="${id}" ${cfg.lojas?.includes(id) ? 'checked' : ''}>
+          <strong>${nome}</strong> <span class="pequeno texto-fraco">${dica}</span></label>`).join('')}
       </div>
       <div class="linha mt"><button class="btn-primario" id="v-salvar">💾 Salvar</button></div>
     </div>`);
@@ -101,8 +113,7 @@ export async function renderVitrine() {
       sync_url: valor('#v-sync-url'),
       sync_token: valor('#v-sync-token'),
       ativa: form.querySelector('#v-ativa').checked,
-      usar_amazon_ml: form.querySelector('#v-amz').checked,
-      usar_todas: form.querySelector('#v-todas').checked,
+      lojas: [...form.querySelectorAll('.v-loja:checked')].map((i) => i.value),
     }));
     if (r) {
       ok('Vitrine salva');

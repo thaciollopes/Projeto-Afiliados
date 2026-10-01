@@ -73,12 +73,19 @@ test('ligada: post da Amazon leva para o site, sem a tag no texto', async () => 
   assert.equal(post.pode_publicar, true);
 });
 
-test('Shopee só usa o site com "todas as lojas" marcado', () => {
+test('cada loja escolhe: padrão só Amazon; Mercado Livre vai direto para o meli.la', () => {
+  const ml = { id: 'prd_m', marketplace: 'mercadolivre' };
   const shopee = { id: 'prd_x', marketplace: 'shopee' };
+  assert.deepEqual(vitrine.lojasDaVitrine(), ['amazon'], 'padrão: só Amazon');
+  assert.equal(vitrine.linkDaVitrine(ml), null, 'ML vai direto');
   assert.equal(vitrine.linkDaVitrine(shopee), null);
-  vitrine.salvarConfigVitrine({ usar_todas: true });
+
+  vitrine.salvarConfigVitrine({ lojas: ['amazon', 'shopee', 'loja-falsa'] });
+  assert.deepEqual(vitrine.lojasDaVitrine(), ['amazon', 'shopee'], 'loja desconhecida não entra');
   assert.match(vitrine.linkDaVitrine(shopee), /\/p\/x$/);
-  vitrine.salvarConfigVitrine({ usar_todas: false });
+  assert.equal(vitrine.linkDaVitrine(ml), null);
+
+  vitrine.salvarConfigVitrine({ lojas: ['amazon'] });
 });
 
 test('página do produto: foto, preço, botão para a Amazon e aviso de associado; título escapado', async () => {
