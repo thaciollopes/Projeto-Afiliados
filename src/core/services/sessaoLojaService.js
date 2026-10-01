@@ -67,7 +67,7 @@ export function parseCookies(entrada) {
     }).filter((c) => c && c.name);
   }
 
-  const uteis = lista.filter((c) => !DESCARTAVEIS.test(c.name));
+  const uteis = lista.filter((c) => !DESCARTAVEIS.test(c.name)).map(limparCookie);
   if (!uteis.length) throw badRequest('Não encontrei cookies de sessão válidos no que foi colado.');
 
   const dominios = [...new Set(uteis.map((c) => c.domain).filter(Boolean))];
@@ -98,9 +98,23 @@ export function salvarSessao(loja, entrada) {
   return resumoSessao(loja);
 }
 
+/**
+ * Cabeçalho HTTP só aceita byte (até 255). O ML guarda a última busca crua no
+ * cookie LAST_SEARCH ("–", acento de título) e o fetch recusava a sessão inteira:
+ * "Cannot convert argument to a ByteString". Codifica só o que passa de 255.
+ */
+function valorDeCabecalho(texto) {
+  return String(texto).replace(/[^\u0000-ÿ]+/gu, (trecho) => encodeURIComponent(trecho));
+}
+
+function limparCookie(c) {
+  return { ...c, name: valorDeCabecalho(c.name), value: valorDeCabecalho(c.value) };
+}
+
 /** Cookies de verdade — só para o coletor, nunca para a tela. */
 export function cookiesDaSessao(loja) {
-  return settingRepository.get(`${PREFIXO}${loja}`)?.cookies || null;
+  // Limpa na leitura também: sessão salva antes da correção continua valendo.
+  return settingRepository.get(`${PREFIXO}${loja}`)?.cookies?.map(limparCookie) || null;
 }
 
 /** O que a tela pode ver: sem nenhum valor de cookie. */

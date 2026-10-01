@@ -24,7 +24,7 @@ const campanhas = await import('../src/core/services/campaignService.js');
 const verificacao = await import('../src/core/services/verificacaoLinkService.js');
 const { ehUrlDeLoja, ehEncurtador, ehLinkDeAfiliadoCurto, lojaDaUrl } = await import('../src/core/services/affiliateLinkService.js');
 const { salvarTagDaLoja } = await import('../src/core/services/lojaService.js');
-const { salvarSessao } = await import('../src/core/services/sessaoLojaService.js');
+const { salvarSessao, cookiesDaSessao } = await import('../src/core/services/sessaoLojaService.js');
 const { importProducts, expireStaleProducts } = await import('../src/core/services/productService.js');
 const { linkParaCanal } = await import('../src/core/services/linkPorCanalService.js');
 const { criarCanal } = await import('../src/core/services/canalService.js');
@@ -213,6 +213,14 @@ test('campanha pula produto bloqueado em vez de travar nele a cada ciclo', async
   assert.equal(r.enfileiradas, 1);
   const fila = repos.publicationRepository.list({ filters: { channel_id: canal.id } });
   assert.equal(fila[0].product_id, bom.id);
+});
+
+test('cookie com "–" na última busca do ML não derruba a sessão (ByteString)', () => {
+  salvarSessao('mercadolivre', 'ssid=abc; LAST_SEARCH=perfume – feminino 100ml; orgnickp=EU');
+  const cabecalho = cookiesDaSessao('mercadolivre').map((c) => `${c.name}=${c.value}`).join('; ');
+  assert.doesNotThrow(() => new Headers({ cookie: cabecalho }));
+  assert.match(cabecalho, /LAST_SEARCH=perfume %E2%80%93 feminino/);
+  assert.match(cabecalho, /ssid=abc/);
 });
 
 test.after(() => {
