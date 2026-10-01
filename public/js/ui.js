@@ -235,13 +235,50 @@ export function tabela({ colunas, linhas, vazio = 'Nada por aqui ainda.' }) {
 
 /** Botoes de acao de uma linha da tabela. */
 export function acoes(botoes) {
+  ligarBaloes();
   const caixa = el('<div class="linha" style="justify-content:flex-end;gap:6px"></div>');
   for (const b of botoes.filter(Boolean)) {
-    const botao = el(`<button class="btn-pequeno ${b.classe || ''}" title="${escapar(b.titulo || b.rotulo)}">${b.rotulo}</button>`);
+    // data-dica: balão próprio (o title do navegador demora e não aparece no celular).
+    const dica = escapar(b.titulo || b.rotulo);
+    const botao = el(`<button class="btn-pequeno ${b.classe || ''}" data-dica="${dica}" aria-label="${dica}">${b.rotulo}</button>`);
     botao.onclick = b.aoClicar;
     caixa.appendChild(botao);
   }
   return caixa;
+}
+
+/**
+ * Balão para qualquer elemento com data-dica. Um só, no body, posicionado
+ * acima do botão (ou abaixo, se não couber). Ligado uma vez, vale para o painel todo.
+ */
+export function ligarBaloes() {
+  if (typeof document === 'undefined' || document.body?.dataset.baloes) return;
+  document.body.dataset.baloes = '1';
+  const balao = document.createElement('div');
+  balao.className = 'balao-dica';
+  document.body.appendChild(balao);
+  const mostrar = (alvo) => {
+    balao.textContent = alvo.dataset.dica;
+    const r = alvo.getBoundingClientRect();
+    balao.classList.add('visivel');
+    const b = balao.getBoundingClientRect();
+    const cima = r.top - b.height - 8;
+    balao.style.top = `${cima > 4 ? cima : r.bottom + 8}px`;
+    balao.style.left = `${Math.min(Math.max(4, r.left + r.width / 2 - b.width / 2), window.innerWidth - b.width - 4)}px`;
+  };
+  const esconder = () => balao.classList.remove('visivel');
+  document.addEventListener('mouseover', (e) => {
+    const alvo = e.target.closest?.('[data-dica]');
+    if (alvo) mostrar(alvo); else esconder();
+  });
+  document.addEventListener('focusin', (e) => { if (e.target.dataset?.dica) mostrar(e.target); });
+  document.addEventListener('focusout', esconder);
+  document.addEventListener('scroll', esconder, true);
+}
+
+/** Linha "o que cada botão faz": [['👁️', 'ver produtos'], ...] */
+export function legenda(itens) {
+  return `<div class="legenda-acoes">${itens.map(([icone, texto]) => `<span><b>${icone}</b> ${escapar(texto)}</span>`).join('')}</div>`;
 }
 
 export function etiqueta(texto, tipo = '') {

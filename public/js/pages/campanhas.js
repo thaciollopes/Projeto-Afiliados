@@ -1,7 +1,7 @@
 import { api } from '../api.js';
 import {
   el, escapar, moeda, dataHora, modal, formulario, confirmar, tentar, ok, erro,
-  tabela, acoes, statusEtiqueta, etiqueta,
+  tabela, acoes, statusEtiqueta, etiqueta, legenda,
 } from '../ui.js';
 
 const MODOS = [
@@ -34,6 +34,13 @@ export async function renderCampanhas() {
         <p>A campanha decide o que publicar, onde e de quanto em quanto tempo. Ela só enfileira — quem envia é a fila.</p></div>
         <button class="btn-primario" id="nova">+ Nova campanha</button>
       </div>
+      ${legenda([
+    ['👁️', 'ver produtos e o que já foi postado'],
+    ['▶️', 'disparar agora'],
+    ['⏸️ / ✅', 'pausar / ativar'],
+    ['✏️', 'editar'],
+    ['🗑️', 'remover'],
+  ])}
     </div>`);
   tela.appendChild(cabecalho);
 
@@ -60,20 +67,22 @@ export async function renderCampanhas() {
         {
           rotulo: 'Ações', classe: 'acoes',
           render: (c) => acoes([
-            { rotulo: '👁️', titulo: 'Ver produtos que ela pegaria', aoClicar: () => verProdutos(c) },
-            { rotulo: '▶️', titulo: 'Disparar agora (escolher quantos produtos)', aoClicar: () => disparar(c) },
+            { rotulo: '👁️', titulo: 'Ver produtos: quais esta campanha usa e quais já foram postados', aoClicar: () => verProdutos(c) },
+            { rotulo: '▶️', titulo: 'Disparar agora: manda produtos na hora, sem esperar o intervalo (você escolhe quantos)', aoClicar: () => disparar(c) },
             {
               rotulo: c.status === 'ativa' ? '⏸️' : '✅',
-              titulo: c.status === 'ativa' ? 'Pausar' : 'Ativar',
+              titulo: c.status === 'ativa'
+                ? 'Pausar: para de postar até você ativar de novo'
+                : 'Ativar: começa a postar sozinha dentro do horário',
               aoClicar: async () => {
                 await tentar(() => api.post(`/campanhas/${c.id}/${c.status === 'ativa' ? 'pausar' : 'ativar'}`),
                   c.status === 'ativa' ? 'Campanha pausada' : 'Campanha ativada');
                 carregar();
               },
             },
-            { rotulo: '✏️', titulo: 'Editar', aoClicar: () => abrir(c) },
+            { rotulo: '✏️', titulo: 'Editar: palavras-chave, grupos, horário e limites', aoClicar: () => abrir(c) },
             {
-              rotulo: '🗑️', titulo: 'Remover', classe: 'btn-perigo',
+              rotulo: '🗑️', titulo: 'Remover a campanha (o que já foi enviado continua no histórico)', classe: 'btn-perigo',
               aoClicar: () => confirmar(`Remover a campanha "${c.nome}"?`, async () => {
                 await tentar(() => api.del(`/campanhas/${c.id}`), 'Removida');
                 carregar();

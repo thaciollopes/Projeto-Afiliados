@@ -1,7 +1,7 @@
 import { api } from '../api.js';
 import {
   el, escapar, moeda, dataHora, modal, confirmar, tentar, ok,
-  tabela, acoes, statusEtiqueta, previewWhatsApp,
+  tabela, acoes, statusEtiqueta, previewWhatsApp, legenda,
 } from '../ui.js';
 
 // ----------------------------------------------------------------- fila --
@@ -13,10 +13,11 @@ export async function renderFila() {
     <div class="cartao">
       <div class="cartao-titulo">
         <div><h2>Fila de publicação</h2>
-        <p>Tudo que está esperando horário, tentativa ou envio. Nada sai daqui fora da janela do grupo.</p></div>
+        <p>Tudo que está esperando horário, tentativa ou envio. Nada sai daqui fora da janela do grupo.</p>
+        ${legenda([['👁️', 'ver mensagem'], ['📤', 'enviar já'], ['🔁', 'tentar de novo'], ['✖️', 'cancelar'], ['🗑️', 'excluir registro']])}</div>
         <div class="linha">
-          <button class="btn" id="processar">▶️ Processar agora</button>
-          <button class="btn" id="forcar">⚡ Processar ignorando horário</button>
+          <button class="btn" id="processar" data-dica="Envia agora o que já está na vez, respeitando horário, limite e pausa de cada grupo">▶️ Processar agora</button>
+          <button class="btn" id="forcar" data-dica="Envia mesmo fora do horário do grupo e sem esperar o intervalo — use com cuidado">⚡ Processar ignorando horário</button>
         </div>
       </div>
       <div id="resumo" class="grade g4"></div>
@@ -125,9 +126,9 @@ function tabelaPublicacoes(linhas, recarregar, ehFila) {
       {
         rotulo: 'Ações', classe: 'acoes',
         render: (p) => acoes([
-          { rotulo: '👁️', titulo: 'Ver mensagem', aoClicar: () => verMensagem(p) },
+          { rotulo: '👁️', titulo: 'Ver a mensagem exatamente como sai no grupo', aoClicar: () => verMensagem(p) },
           p.status !== 'enviado' ? {
-            rotulo: '📤', titulo: 'Enviar agora',
+            rotulo: '📤', titulo: 'Enviar agora: manda já, sem esperar a vez na fila',
             aoClicar: async () => {
               const r = await tentar(() => api.post(`/publicacoes/${p.id}/enviar`));
               if (r?.ok) ok(r.simulado ? 'Simulado (dry run)' : 'Enviado');
@@ -135,21 +136,21 @@ function tabelaPublicacoes(linhas, recarregar, ehFila) {
             },
           } : null,
           p.status === 'erro' ? {
-            rotulo: '🔁', titulo: 'Tentar de novo',
+            rotulo: '🔁', titulo: 'Tentar de novo: volta para a fila depois de um erro',
             aoClicar: async () => {
               await tentar(() => api.post(`/publicacoes/${p.id}/retry`), 'Recolocado na fila');
               recarregar();
             },
           } : null,
           p.status !== 'enviado' ? {
-            rotulo: '✖️', titulo: 'Cancelar',
+            rotulo: '✖️', titulo: 'Cancelar: tira da fila sem enviar',
             aoClicar: async () => {
               await tentar(() => api.post(`/publicacoes/${p.id}/cancelar`), 'Cancelada');
               recarregar();
             },
           } : null,
           {
-            rotulo: '🗑️', titulo: 'Excluir registro', classe: 'btn-perigo',
+            rotulo: '🗑️', titulo: 'Excluir o registro (não apaga a mensagem do grupo)', classe: 'btn-perigo',
             aoClicar: () => confirmar('Excluir este registro?', async () => {
               await tentar(() => api.del(`/publicacoes/${p.id}`), 'Excluído');
               recarregar();

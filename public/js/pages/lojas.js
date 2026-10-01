@@ -13,6 +13,42 @@ const COMO_VIRA_LINK = {
   painel: 'Só o link gerado no painel da loja paga comissão — cole-o no produto.',
 };
 
+/** Cor e sigla de cada loja: bater o olho e saber em qual se está mexendo. */
+const MARCAS = {
+  mercadolivre: { fundo: '#FFE600', texto: '#2D3277', sigla: 'ML' },
+  shopee: { fundo: '#EE4D2D', texto: '#FFFFFF', sigla: 'S' },
+  amazon: { fundo: '#232F3E', texto: '#FF9900', sigla: 'a' },
+  magalu: { fundo: '#0086FF', texto: '#FFFFFF', sigla: 'M' },
+};
+
+function marca(loja) {
+  return MARCAS[loja.id] || { fundo: 'var(--primaria)', texto: '#fff', sigla: loja.nome.slice(0, 1) };
+}
+
+function logo(loja, classe = '') {
+  const m = marca(loja);
+  return `<span class="loja-logo ${classe}" style="background:${m.fundo};color:${m.texto}" aria-hidden="true">${escapar(m.sigla)}</span>`;
+}
+
+/** "hoje às 10:11", "ontem às 18:02", "há 5 dias (26/09)". */
+function quando(iso) {
+  const data = new Date(iso);
+  const hora = data.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  const dia = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const dias = Math.round((dia(new Date()) - dia(data)) / 86400000);
+  if (dias <= 0) return `hoje às ${hora}`;
+  if (dias === 1) return `ontem às ${hora}`;
+  return `há ${dias} dias (${data.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })})`;
+}
+
+/** Situação do cookie em uma frase, com a cor certa. */
+function estadoCookie(loja) {
+  const s = loja.sessao;
+  if (!s.configurada) return { icone: '⚠️', texto: 'Cookie ainda não enviado', tipo: 'alerta' };
+  if (s.expirou) return { icone: '❌', texto: `Cookie vencido — enviado ${quando(s.salvo_em)}. Envie de novo.`, tipo: 'erro' };
+  return { icone: '✅', texto: `Cookie enviado ${quando(s.salvo_em)}`, tipo: 'ok' };
+}
+
 function situacao(loja) {
   const temCookie = loja.sessao.configurada && !loja.sessao.expirou;
   if (loja.api?.configurada && loja.api.status !== 'erro') return { texto: 'pronta (API)', tipo: 'ok' };
@@ -24,18 +60,18 @@ function situacao(loja) {
 
 function blocoCookie(loja) {
   const s = loja.sessao;
-  const estado = !s.configurada
-    ? etiqueta('sem cookie')
-    : s.expirou
-      ? etiqueta('cookie expirado', 'erro')
-      : etiqueta(`${s.total_cookies} cookies · salvo em ${new Date(s.salvo_em).toLocaleDateString('pt-BR')}`, 'ok');
+  const c = estadoCookie(loja);
   const obrigatorio = loja.link_afiliado === 'cookie';
+  const detalhe = s.configurada
+    ? `${s.total_cookies} cookies${s.expira_em ? ` · vence em ${new Date(s.expira_em).toLocaleDateString('pt-BR')}` : ''}`
+    : (obrigatorio ? 'sem ele o link de afiliado não é gerado' : '');
 
   return `
     <div class="loja-passo">
-      <div class="linha" style="justify-content:space-between">
-        <strong>2. Cookie da sessão ${obrigatorio ? '' : '<span class="dica">(opcional)</span>'}</strong>
-        ${estado}
+      <strong>2. Cookie da sessão ${obrigatorio ? '' : '<span class="dica">(opcional)</span>'}</strong>
+      <div class="cookie-status ${c.tipo}">
+        <span class="cookie-icone">${c.icone}</span>
+        <span><strong>${escapar(c.texto)}</strong>${detalhe ? `<br><span class="pequeno">${escapar(detalhe)}</span>` : ''}</span>
       </div>
       <p class="pequeno texto-fraco" style="margin:4px 0 8px">${escapar(loja.dica_cookie)}</p>
       <textarea rows="3" data-cookie="${loja.id}"
@@ -231,11 +267,17 @@ function passosExtras(loja) {
 function cartaoLoja(loja) {
   const sit = situacao(loja);
   return `
-    <div class="cartao loja" id="loja-${loja.id}">
+    <div class="cartao loja" id="loja-${loja.id}" style="--marca:${marca(loja).fundo}">
       <div class="cartao-titulo" style="margin-bottom:8px">
-        <div class="linha" style="gap:8px">
-          <h2 style="margin:0">${escapar(loja.nome)}</h2>
-          ${etiqueta(sit.texto, sit.tipo)}
+        <div class="linha" style="gap:12px">
+          ${logo(loja)}
+          <div>
+            <h2 style="margin:0">${escapar(loja.nome)}</h2>
+            <div class="linha" style="gap:6px;margin-top:4px">
+              ${etiqueta(sit.texto, sit.tipo)}
+              ${etiqueta(`${estadoCookie(loja).icone} ${estadoCookie(loja).texto}`, estadoCookie(loja).tipo)}
+            </div>
+          </div>
         </div>
         <div class="linha">
           <a class="btn btn-pequeno" href="${escapar(loja.site)}" target="_blank" rel="noopener">abrir loja</a>
@@ -271,7 +313,22 @@ export async function renderLojas() {
       .grade .loja-passo { margin-top: 0; }
       .loja-passo textarea, .loja-passo input { width: 100%; box-sizing: border-box; }
       .loja-resumo { display: flex; flex-direction: column; gap: 2px; }
-      .lojas-indice a { text-decoration: none; }
+      .lojas-indice { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 10px; }
+      .lojas-indice a { text-decoration: none; color: inherit; display: flex; gap: 10px; align-items: center;
+        padding: 10px 12px; border: 1px solid var(--borda); border-left: 5px solid var(--marca); border-radius: 10px;
+        background: var(--superficie); transition: box-shadow .15s, transform .15s; }
+      .lojas-indice a:hover { box-shadow: var(--sombra); transform: translateY(-1px); }
+      .lojas-indice .nome { font-weight: 600; }
+      .lojas-indice .pequeno { display: block; margin-top: 2px; }
+      .cartao.loja { border-top: 6px solid var(--marca); scroll-margin-top: 72px; }
+      .loja-logo { flex: none; width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center;
+        font-weight: 800; font-size: 17px; letter-spacing: -.02em; box-shadow: inset 0 0 0 1px rgba(0,0,0,.08); }
+      .loja-logo.menor { width: 34px; height: 34px; font-size: 13px; border-radius: 9px; }
+      .cookie-status { display: flex; gap: 10px; align-items: center; padding: 10px 12px; border-radius: 10px; margin: 8px 0 6px; font-size: 14px; }
+      .cookie-status .cookie-icone { font-size: 22px; line-height: 1; }
+      .cookie-status.ok { background: var(--ok-suave); color: var(--ok); }
+      .cookie-status.alerta { background: var(--alerta-suave); color: var(--alerta); }
+      .cookie-status.erro { background: var(--erro-suave); color: var(--erro); }
     </style>`));
 
   tela.appendChild(el(`
@@ -283,10 +340,14 @@ export async function renderLojas() {
              É isso que faz os links saírem com a sua comissão. ${prontas} de ${lojas.length} prontas.</p>
         </div>
       </div>
-      <div class="linha lojas-indice">
+      <div class="lojas-indice">
         ${lojas.map((l) => {
     const sit = situacao(l);
-    return `<a href="#/lojas" data-ir="${l.id}">${etiqueta(`${l.nome}: ${sit.texto}`, sit.tipo)}</a>`;
+    const c = estadoCookie(l);
+    return `<a href="#/lojas" data-ir="${l.id}" style="--marca:${marca(l).fundo}" data-dica="Ir para ${escapar(l.nome)}">
+      ${logo(l, 'menor')}
+      <span><span class="nome">${escapar(l.nome)}</span> ${etiqueta(sit.texto, sit.tipo)}
+      <span class="pequeno" style="color:var(--${c.tipo})">${c.icone} ${escapar(c.texto)}</span></span></a>`;
   }).join('')}
       </div>
       <details class="mt">

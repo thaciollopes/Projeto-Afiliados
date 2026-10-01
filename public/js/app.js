@@ -1,6 +1,6 @@
 /** Arranque do painel: menu, tema, rotas e estado global leve. */
 import { api } from './api.js';
-import { erro } from './ui.js';
+import { erro, ligarBaloes } from './ui.js';
 import { rotas } from './router.js';
 import { secaoDaRota } from './pages/manual.js';
 
@@ -143,6 +143,7 @@ async function iniciar() {
   aplicarTema(localStorage.getItem('tema') || 'claro');
   montarMenu();
   ligarEventos();
+  ligarBaloes();
   await carregarConfig();
   await primeiraVisita();
   await navegar();
