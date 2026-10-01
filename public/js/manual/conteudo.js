@@ -338,7 +338,7 @@ export const SECOES = [
         passos: [
           'Em <strong>Grupos e canais</strong>, clique em <strong>📲 Importar do WhatsApp</strong>.',
           'Aparecem os grupos e os <strong>canais do WhatsApp</strong> (📢) em que você é dono ou admin. Marque e importe.',
-          'Em cada um, ajuste <strong>intervalo</strong>, <strong>horário</strong> e <strong>máximo por dia</strong>.',
+          'Em cada um, ajuste <strong>intervalo</strong> e <strong>horário</strong>. Quantos posts por dia é decidido na campanha.',
           'Use 📤 para mandar uma mensagem de teste.',
         ],
       },
@@ -394,7 +394,7 @@ export const SECOES = [
           '<strong>Palavras-chave</strong>: separe por vírgula e o produto entra se tiver <em>qualquer</em> uma no título. Um <code>-</code> na frente tira o produto. Ex.: <code>perfume, skincare, escova progressiva, -masculino</code>.',
           'Salve <strong>pausada</strong>. Clique em 👁️ para ver os produtos que ela pegaria e em ▶️ para rodar uma rodada de teste.',
           'Conferiu na Fila? Ative a campanha. Ela começa sozinha assim que estiver dentro do horário (confere a cada 30 segundos) — criar depois da hora inicial não atrapalha.',
-          '<strong>Produtos por rodada</strong>: quantos saem de uma vez a cada intervalo. Eles vão em sequência, com pausa de ~1 minuto entre um e outro, e nunca passam do máximo por dia do grupo.',
+          '<strong>Produtos por rodada</strong>: quantos saem de uma vez a cada intervalo. Eles vão em sequência, com pausa de ~1 minuto entre um e outro, e nunca passam do máximo por dia da campanha (se você colocar um).',
           'Na lista, a coluna <strong>Progresso</strong> mostra o que saiu hoje (verde), o que está na fila (roxo) e quantos produtos da campanha já foram postados. Em 👁️ cada produto aparece como <em>postado</em>, <em>na fila</em> ou <em>ainda não</em>.',
           '▶️ <strong>Disparar agora</strong>: escolha quantos produtos mandar na hora, fora do intervalo.',
         ],
@@ -463,7 +463,7 @@ export const SECOES = [
         itens: [
           'Mostra <strong>"digitando..."</strong> por alguns segundos antes de cada post.',
           'Envia <strong>um post por vez</strong>, com pausa sorteada entre eles (não dispara tudo no mesmo segundo).',
-          'Respeita o horário, o intervalo e o máximo por dia de cada grupo.',
+          'Respeita o horário e o intervalo de cada grupo, e o máximo por dia que você definir na campanha.',
         ],
       },
       {
@@ -547,7 +547,7 @@ export const SECOES = [
     blocos: [
       {
         itens: [
-          '<strong>Nada é enviado:</strong> está em MODO SIMULAÇÃO? A campanha está ativa? A campanha e o grupo estão dentro do horário e abaixo do máximo por dia? Clique em ▶️ na campanha: o aviso diz o motivo.',
+          '<strong>Nada é enviado:</strong> está em MODO SIMULAÇÃO? A campanha está ativa? A campanha e o grupo estão dentro do horário? A campanha passou do máximo por dia que você definiu? Veja a coluna <strong>Quando sai</strong> na Fila. Clique em ▶️ na campanha: o aviso diz o motivo.',
           '<strong>A extensão ou o n8n dizem "não autorizado" (401):</strong> o painel tem senha — veja "Senha do painel".',
           '<strong>"sem comissão" nos produtos do ML/Shopee:</strong> conecte a loja de novo (o cookie venceu).',
           '<strong>"ID de outra conta":</strong> o cookie conectado é de outra conta, ou a tag/ID em Minhas lojas está errada.',

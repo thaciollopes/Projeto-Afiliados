@@ -259,7 +259,7 @@ export async function enqueue({
   });
 }
 
-/** O canal aceita envio agora? (janela de horario + limite diario) */
+/** O canal aceita envio agora? (status + janela de horario) */
 export function channelWindowOpen(canal, reference = new Date()) {
   if (canal.status !== 'ativo') return { aberto: false, motivo: 'canal_pausado' };
 
@@ -267,15 +267,7 @@ export function channelWindowOpen(canal, reference = new Date()) {
     return { aberto: false, motivo: 'fora_do_horario' };
   }
 
-  if (canal.limite_diario) {
-    const enviadasHoje = publicationRepository.count({
-      channel_id: canal.id,
-      status: 'enviado',
-      enviado_em: { gte: inicioDoDiaIso(reference, config.app.timezone) },
-    });
-    if (enviadasHoje >= Number(canal.limite_diario)) return { aberto: false, motivo: 'limite_diario' };
-  }
-
+  // Sem teto diario por grupo: quem limita o dia e a campanha (decisao do dono).
   return { aberto: true, motivo: null };
 }
 
@@ -577,8 +569,8 @@ function pausaMediaMs() {
 
 /**
  * Por que cada post da fila ainda nao saiu e quando deve sair. Simula o grupo
- * na ordem da fila: intervalo do grupo entre lotes, pausa curta dentro do lote,
- * limite do dia e horario. E uma estimativa para a tela — quem decide e a fila.
+ * na ordem da fila: intervalo do grupo entre lotes, pausa curta dentro do lote
+ * e horario. E uma estimativa para a tela — quem decide e a fila.
  * @returns {Object<string, {motivo:string, previsto:string|null}>} por id
  */
 export function previsaoDaFila(pubs, reference = new Date()) {
@@ -604,21 +596,12 @@ export function previsaoDaFila(pubs, reference = new Date()) {
       const ultimo = publicationRepository.findAll({
         filters: { channel_id: canal.id, status: 'enviado' }, sort: 'enviado_em DESC', limit: 1,
       }).rows[0];
-      const enviadasHoje = canal.limite_diario ? publicationRepository.count({
-        channel_id: canal.id, status: 'enviado', enviado_em: { gte: inicioDoDiaIso(reference, tz) },
-      }) : 0;
       porCanal.set(canal.id, {
         livreEm: canal.ultimo_envio ? Date.parse(canal.ultimo_envio) : 0,
         lote: ultimo?.lote || null,
-        vagas: canal.limite_diario ? Number(canal.limite_diario) - enviadasHoje : Infinity,
       });
     }
     const g = porCanal.get(canal.id);
-
-    if (g.vagas <= 0) {
-      resultado[pub.id] = { motivo: `limite do dia do grupo atingido (${canal.limite_diario}) — sai amanhã a partir das ${canal.hora_inicio || '00:00'}`, previsto: null };
-      continue;
-    }
 
     const mesmoLote = pub.lote && pub.lote === g.lote;
     const espera = mesmoLote ? pausaMediaMs() : Number(canal.intervalo_minutos || 0) * 60000;
@@ -641,7 +624,6 @@ export function previsaoDaFila(pubs, reference = new Date()) {
     resultado[pub.id] = { motivo, previsto: new Date(quando).toISOString() };
     g.livreEm = quando;
     g.lote = pub.lote || null;
-    g.vagas -= 1;
   }
   return resultado;
 }

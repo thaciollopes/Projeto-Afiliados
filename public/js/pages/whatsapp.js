@@ -90,7 +90,6 @@ export async function renderCanais() {
     { nome: 'sessao', rotulo: 'Sessão do WAHA', dica: 'só WhatsApp; normalmente "default"' },
     { nome: 'sub_id', rotulo: 'Sub ID (Shopee)', dica: 'aparece no relatório da Shopee; vazio = gerado do nome' },
     { nome: 'intervalo_minutos', rotulo: 'Intervalo (min)', tipo: 'number' },
-    { nome: 'limite_diario', rotulo: 'Máximo por dia', tipo: 'number', dica: 'em branco = sem limite' },
     { nome: 'hora_inicio', rotulo: 'Hora inicial', dica: 'HH:MM' },
     { nome: 'hora_fim', rotulo: 'Hora final', dica: 'HH:MM' },
     { nome: 'status', rotulo: 'Status', tipo: 'select', opcoes: ['ativo', 'pausado'] },
@@ -102,7 +101,7 @@ export async function renderCanais() {
     <div class="cartao">
       <div class="cartao-titulo">
         <div><h2>Grupos e canais</h2>
-        <p>Cada destino tem o próprio ritmo: intervalo, janela de horário e teto diário.</p></div>
+        <p>Cada destino tem o próprio ritmo: intervalo e janela de horário. Quantos posts por dia é definido na campanha.</p></div>
         <div class="linha">
           <button class="btn" id="importar">📲 Importar do WhatsApp</button>
           <button class="btn-primario" id="novo">+ Adicionar manual</button>
@@ -125,7 +124,6 @@ export async function renderCanais() {
             <span class="pequeno texto-fraco">${escapar(c.identificador)}</span>` },
         { rotulo: 'Tipo', render: (c) => `${c.provider === 'telegram' ? '✈️ Telegram' : '🟢 WhatsApp'} ${etiqueta(c.tipo)}` },
         { rotulo: 'Ritmo', render: (c) => `${c.intervalo_minutos}min · ${c.hora_inicio}–${c.hora_fim}` },
-        { rotulo: 'Teto diário', render: (c) => c.limite_diario || '—' },
         { rotulo: 'Último envio', render: (c) => dataHora(c.ultimo_envio) },
         { rotulo: 'Agora', render: (c) => (c.janela?.aberto ? etiqueta('aceitando', 'ok') : etiqueta(rotuloJanela(c.janela?.motivo), 'alerta')) },
         { rotulo: 'Status', render: (c) => statusEtiqueta(c.status) },
@@ -158,7 +156,7 @@ export async function renderCanais() {
   function abrir(canal) {
     const form = formulario(CAMPOS, canal || {
       tipo: 'grupo', sessao: 'default', status: 'ativo',
-      intervalo_minutos: 30, limite_diario: 20, hora_inicio: '08:00', hora_fim: '22:00',
+      intervalo_minutos: 30, hora_inicio: '08:00', hora_fim: '22:00',
     });
     modal({
       titulo: canal ? 'Editar grupo' : 'Novo grupo',
@@ -245,7 +243,7 @@ export async function renderCanais() {
           nome: input.closest('label').dataset.nome,
           identificador: input.value,
           tipo: input.closest('label').dataset.tipo, provider: 'waha', status: 'ativo',
-          intervalo_minutos: 30, limite_diario: 20, hora_inicio: '08:00', hora_fim: '22:00',
+          intervalo_minutos: 30, hora_inicio: '08:00', hora_fim: '22:00',
         }).catch(() => null);
       }
       ok(`${escolhidos.length} grupo(s) importados`);
@@ -261,7 +259,7 @@ export async function renderCanais() {
 function rotuloJanela(motivo) {
   return {
     fora_do_horario: 'fora do horário',
-    limite_diario: 'teto diário atingido',
+    limite_diario: 'a campanha atingiu o máximo por dia',
     canal_pausado: 'pausado',
   }[motivo] || 'fechado';
 }

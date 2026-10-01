@@ -30,18 +30,6 @@ export function limitarPorRodada(valor) {
   return Math.min(Math.max(Math.trunc(Number(valor)) || 1, 1), MAX_POR_RODADA);
 }
 
-/**
- * Quanto ainda cabe hoje no grupo: limite diario menos o que ja saiu e o que
- * ja esta na fila (senao o lote enche a fila de posts que so sairiam amanha).
- */
-export function vagasNoGrupo(canal, reference = new Date()) {
-  if (!canal.limite_diario) return Infinity;
-  const inicio = inicioDoDiaIso(reference, config.app.timezone);
-  const enviadas = publicationRepository.count({ channel_id: canal.id, status: 'enviado', enviado_em: { gte: inicio } });
-  const naFila = publicationRepository.count({ channel_id: canal.id, status: ['aguardando', 'enviando'] });
-  return Number(canal.limite_diario) - enviadas - naFila;
-}
-
 export const MODOS = [
   'manual', 'automatica', 'pesquisa', 'categoria', 'palavras',
   'promocoes', 'cupons', 'ofertas_do_dia',
@@ -80,7 +68,7 @@ export function createCampaign(data) {
     hora_fim: '22:00',
     loop: true,
     nao_repetir_dias: 7,
-    limite_diario: 20,
+    limite_diario: null,
     filtros: {},
     produto_ids: [],
     dias_semana: [],
@@ -323,11 +311,11 @@ export async function runCampaign(campanha, { reference = new Date(), forcar = f
       continue;
     }
 
-    // Lote: N produtos de uma vez (produtos_por_rodada), sem passar do que
-    // ainda cabe hoje no grupo e na campanha. Produto bloqueado (sem preco,
+    // Lote: N produtos de uma vez (produtos_por_rodada), sem passar do maximo
+    // por dia da campanha (se houver — vazio = sem limite). Produto bloqueado (sem preco,
     // link de outra conta...) e pulado em vez de travar o grupo; o limite de
     // tentativas existe porque cada uma pode ir a rede conferir o link.
-    const vagas = Math.min(quantidade, vagasNoGrupo(canal, reference), vagasDaCampanha);
+    const vagas = Math.min(quantidade, vagasDaCampanha);
     if (vagas <= 0) {
       resultado.ignorados.push({ canal: canal.nome, motivo: 'limite_diario' });
       continue;

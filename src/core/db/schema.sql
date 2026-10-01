@@ -155,7 +155,7 @@ CREATE TABLE IF NOT EXISTS channels (
   intervalo_minutos INTEGER DEFAULT 30,
   hora_inicio       TEXT DEFAULT '08:00',
   hora_fim          TEXT DEFAULT '22:00',
-  limite_diario     INTEGER DEFAULT 20,
+  limite_diario     INTEGER,            -- sem uso: o teto do dia e da campanha
   observacoes       TEXT,
   ultimo_envio      TEXT,
   sub_id            TEXT,
@@ -190,7 +190,7 @@ CREATE TABLE IF NOT EXISTS campaigns (
   dias_semana       TEXT,
   loop              INTEGER DEFAULT 1,
   nao_repetir_dias  INTEGER DEFAULT 7,
-  limite_diario     INTEGER DEFAULT 20,
+  limite_diario     INTEGER,            -- vazio = sem limite
   produtos_por_rodada INTEGER DEFAULT 1,
   usar_ia           INTEGER DEFAULT 0,
   status            TEXT NOT NULL DEFAULT 'pausada',

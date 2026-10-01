@@ -30,7 +30,7 @@ preview, dry run e auditoria — e o que impede um erro de virar 50 mensagens er
 | **Intervalo** | tempo mínimo entre publicações da campanha |
 | **Hora inicial / final** | janela em que pode publicar |
 | **Dias da semana** | nenhum marcado = todos os dias |
-| **Máximo por dia** | teto da campanha |
+| **Máximo por dia** | teto da campanha — o único limite diário do sistema; vazio = sem limite |
 | **Não repetir por** | 1, 3, 7, 15, 30 dias ou nunca repetir |
 | **Loop** | ao acabar a lista, recomeça; sem loop, a campanha se encerra sozinha |
 
@@ -79,7 +79,7 @@ O sistema diz o motivo, e todos são propositais:
 | `fora_do_dia` | hoje não está nos dias da semana |
 | `aguardando_intervalo` | ainda não completou o intervalo |
 | `fora_do_horario` | fora da janela do grupo |
-| `limite_diario` | o grupo já bateu o teto |
+| `limite_diario` | a campanha já bateu o máximo por dia dela |
 | `sem_canais` | nenhum grupo ligado à campanha |
 | `sem_produtos` | nenhum produto bate com os filtros |
 | `todos_ja_publicados` | todos foram publicados dentro da janela de repetição |

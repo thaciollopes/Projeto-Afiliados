@@ -84,7 +84,7 @@ A camada Repository continua sendo o ponto de troca: `BaseRepository` define
 | `coupons` | cupom próprio ou da loja: tipo, valor, mínimo, teto, validade, alcance |
 | `campaigns` | regra automática: modo, filtros, ritmo, janela, loop, dedupe |
 | `campaign_targets` | destino da campanha (cada grupo com intervalo/teto próprios) |
-| `channels` | grupos e canais do WhatsApp, com janela e teto diário |
+| `channels` | grupos e canais do WhatsApp, com janela de horário e intervalo (sem teto diário: quem limita o dia é a campanha) |
 | `templates` | formatos de post, com variáveis e blocos condicionais |
 | `publications` | fila **e** histórico (mesmo registro muda de status) |
 | `saved_searches` | pesquisas salvas (viram campanha) |
@@ -107,7 +107,7 @@ buildPublication()
    ↓  monta o texto (template; IA só no texto, nunca nos números)
 enqueue()                      status: aguardando
    ↓
-processQueue()                 checa janela do grupo e teto diário
+processQueue()                 checa janela e intervalo do grupo
    ↓
 WhatsAppProvider.sendMessage() (ou dry run, se DRY_RUN=true)
    ↓

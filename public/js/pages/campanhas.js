@@ -175,7 +175,7 @@ export async function renderCampanhas() {
       { nome: 'intervalo_minutos', rotulo: 'Intervalo (minutos)', tipo: 'number' },
       { nome: 'hora_inicio', rotulo: 'Hora inicial', dica: 'HH:MM' },
       { nome: 'hora_fim', rotulo: 'Hora final', dica: 'HH:MM' },
-      { nome: 'limite_diario', rotulo: 'Máximo por dia', tipo: 'number', dica: 'em branco ou 0 = sem limite' },
+      { nome: 'limite_diario', rotulo: 'Máximo de posts por dia', tipo: 'number', dica: 'em branco = sem limite (o único limite diário do sistema)' },
       {
         nome: 'produtos_por_rodada', rotulo: 'Produtos por rodada', tipo: 'select', opcoes: QUANTIDADES,
         dica: 'quantos saem de uma vez a cada intervalo (com pausa de ~1 min entre eles)',
@@ -201,7 +201,7 @@ export async function renderCampanhas() {
       f_avaliacao_min: filtros.avaliacao_min, f_ordenacao: filtros.ordenacao || 'score',
     } : {
       modo: 'automatica', intervalo_minutos: 30, hora_inicio: '08:00', hora_fim: '22:00',
-      limite_diario: 20, nao_repetir_dias: 7, loop: true, f_ordenacao: 'score', produtos_por_rodada: 1,
+      limite_diario: null, nao_repetir_dias: 7, loop: true, f_ordenacao: 'score', produtos_por_rodada: 1,
     };
 
     const form = formulario(campos, valores);

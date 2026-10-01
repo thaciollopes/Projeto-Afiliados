@@ -80,7 +80,7 @@ O WAHA usa uma sessão não oficial. O número pode ser bloqueado se parecer rob
 - número **dedicado**, nunca o pessoal;
 - intervalo de **30 minutos ou mais** por grupo;
 - janela de horário civilizada;
-- teto diário por grupo;
+- máximo por dia definido na campanha (opcional; decisão do dono);
 - só grupos seus ou com permissão.
 
 Esses freios estão no sistema — não os desligue "para testar mais rápido".

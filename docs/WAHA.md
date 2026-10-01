@@ -17,7 +17,7 @@ pode bloquear números que se comportam como robô. Reduza o risco:
 - use um **número dedicado** à divulgação, nunca o pessoal;
 - deixe **intervalo de 30 minutos ou mais** entre posts no mesmo grupo;
 - respeite a janela de horário (ninguém manda oferta às 3 da manhã);
-- use o **teto diário** por grupo;
+- defina o **máximo por dia** na campanha (o grupo não tem teto próprio);
 - publique em grupos **seus** ou onde você tem permissão.
 
 O sistema já tem todos esses freios — eles existem por esse motivo.
@@ -78,7 +78,7 @@ Cada grupo tem configuração própria:
 |---|---|
 | **Intervalo** | tempo mínimo entre dois posts neste grupo |
 | **Hora inicial / final** | janela em que pode receber (ex.: 08:00–22:00) |
-| **Máximo por dia** | teto de posts por dia |
+| ~~Máximo por dia~~ | removido do grupo: o limite do dia fica na campanha |
 | **Status** | pausado = não recebe nada |
 
 A coluna **Agora** mostra, em tempo real, se o grupo está aceitando envio — e, quando

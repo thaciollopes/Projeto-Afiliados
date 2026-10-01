@@ -416,7 +416,7 @@ test('palavras-chave: vírgula vale como "ou" e "-" tira o produto', () => {
 test('lote: 3 produtos por rodada saem em sequência, sem esperar o intervalo do grupo, e a tela mostra o progresso', async () => {
   const grupo = repos.channelRepository.create({
     nome: 'Lote', identificador: 'lote@g.us', status: 'ativo', hora_inicio: '00:00', hora_fim: '23:59',
-    intervalo_minutos: 60, limite_diario: 4,
+    intervalo_minutos: 60,
   });
   for (let i = 1; i <= 6; i += 1) {
     produtos.createProduct({
@@ -426,7 +426,7 @@ test('lote: 3 produtos por rodada saem em sequência, sem esperar o intervalo do
   }
   const campanha = campanhas.createCampaign({
     nome: 'Lote', modo: 'palavras', status: 'ativa', filtros: { termo: 'batom lote' }, canais: [grupo.id],
-    produtos_por_rodada: 3, limite_diario: 50, template_id: template.id,
+    produtos_por_rodada: 3, limite_diario: 4, template_id: template.id,
   });
 
   const r = await campanhas.runCampaign(campanha, { forcar: true });
@@ -450,10 +450,10 @@ test('lote: 3 produtos por rodada saem em sequência, sem esperar o intervalo do
     publicacoes.zerarPausaEntreEnvios();
   }
 
-  // Limite do grupo = 4: pedindo 5, só entra o que ainda cabe hoje.
-  const ocupadas = repos.publicationRepository.count({ channel_id: grupo.id, status: ['enviado', 'aguardando', 'enviando'] });
+  // Máximo da campanha = 4 por dia: pedindo 5, só entra o que ainda cabe hoje.
+  const ocupadas = repos.publicationRepository.count({ campaign_id: campanha.id, status: ['enviado', 'aguardando', 'enviando', 'erro'] });
   const r2 = await campanhas.runCampaign(campanha, { forcar: true, quantidade: 5 });
-  assert.equal(r2.enfileiradas, 4 - ocupadas, 'não passa do máximo por dia do grupo');
+  assert.equal(r2.enfileiradas, 4 - ocupadas, 'não passa do máximo por dia da campanha');
 
   const prog = campanhas.campaignProgress(campanhas.getCampaign(campanha.id));
   assert.equal(prog.produtos.total, 6);
@@ -484,11 +484,11 @@ test('coleta automática: liga na primeira busca, respeita o intervalo e não ro
   assert.equal(coleta.configColeta().buscas.length, 0);
 });
 
-test('fila diz por que o post espera e quando sai (intervalo do grupo, limite do dia)', () => {
+test('fila diz por que o post espera e quando sai; grupo não tem teto diário', () => {
   const agora = new Date();
   const grupo = repos.channelRepository.create({
     nome: 'Previsão', identificador: 'prev@g.us', status: 'ativo', hora_inicio: '00:00', hora_fim: '23:59',
-    intervalo_minutos: 60, limite_diario: 3, ultimo_envio: new Date(agora - 10 * 60000).toISOString(),
+    intervalo_minutos: 60, ultimo_envio: new Date(agora - 10 * 60000).toISOString(),
   });
   repos.publicationRepository.create({
     channel_id: grupo.id, mensagem: 'já foi', status: 'enviado', enviado_em: new Date(agora - 10 * 60000).toISOString(),
@@ -506,8 +506,9 @@ test('fila diz por que o post espera e quando sai (intervalo do grupo, limite do
   assert.ok(minutosA > 49 && minutosA < 51, `sai ~50 min depois: ${minutosA}`);
   const entreAeB = (Date.parse(prev[b.id].previsto) - Date.parse(prev[a.id].previsto)) / 60000;
   assert.equal(Math.round(entreAeB), 60, 'outro lote espera o intervalo inteiro');
-  assert.equal(prev[c.id].previsto, null);
-  assert.match(prev[c.id].motivo, /limite do dia/);
+  const entreBeC = (Date.parse(prev[c.id].previsto) - Date.parse(prev[b.id].previsto)) / 60000;
+  assert.equal(Math.round(entreBeC), 60, 'sem teto diário no grupo: o terceiro também sai');
+  assert.equal(publicacoes.channelWindowOpen({ ...grupo, limite_diario: 1 }, agora).aberto, true, 'limite antigo no grupo é ignorado');
 });
 
 test.after(() => {
