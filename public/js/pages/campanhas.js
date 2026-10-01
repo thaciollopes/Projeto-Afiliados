@@ -127,7 +127,7 @@ export async function renderCampanhas() {
         nome: 'saved_search_id', rotulo: 'Pesquisa salva', tipo: 'select', dica: 'só no modo "por pesquisa"',
         opcoes: [{ valor: '', rotulo: '—' }, ...pesquisas.rows.map((p) => ({ valor: p.id, rotulo: p.nome }))],
       },
-      { nome: 'f_termo', rotulo: 'Palavras-chave', dica: 'filtro' },
+      { nome: 'f_termo', rotulo: 'Palavras-chave', dica: 'separe por vírgula; - na frente exclui (ex.: perfume, skincare, -masculino)' },
       { nome: 'f_categoria', rotulo: 'Categoria', dica: 'filtro' },
       { nome: 'f_marketplace', rotulo: 'Marketplace', dica: 'filtro' },
       { nome: 'f_preco_max', rotulo: 'Preço máximo', tipo: 'number', passo: '0.01' },

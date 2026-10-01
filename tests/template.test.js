@@ -99,3 +99,21 @@ test('selo de menor preço aparece só quando o serviço manda; senão a linha s
   const sem = renderTemplate(corpo, buildContext({ product: { titulo_original: 'Fone', url_final: 'https://x' } }));
   assert.doesNotMatch(sem, /📉/);
 });
+
+test('oferta do ML "com Cupom" avisa no post; com cupom cadastrado, o aviso some', () => {
+  const comCupomMl = { titulo_original: 'Perfume', preco_atual: 100, tags: ['ofertas-ml', 'cupom-ml'] };
+  const precos = calculatePricing({ product: comCupomMl });
+  const texto = renderTemplate(DEFAULT_TEMPLATE_BODY, buildContext({ product: comCupomMl, pricing: precos }));
+  assert.match(texto, /Tem cupom no Mercado Livre/);
+
+  const semTag = { titulo_original: 'Perfume', preco_atual: 100, tags: ['ofertas-ml'] };
+  const outro = renderTemplate(DEFAULT_TEMPLATE_BODY, buildContext({ product: semTag, pricing: calculatePricing({ product: semTag }) }));
+  assert.doesNotMatch(outro, /cupom/i);
+});
+
+test('modelo padrão: sem quantidade vendida não sai "🛒  vendidos" sozinho', () => {
+  const p = { titulo_original: 'Colônia', preco_atual: 65.99, avaliacao: 4.6 };
+  const texto = renderTemplate(DEFAULT_TEMPLATE_BODY, buildContext({ product: p, pricing: calculatePricing({ product: p }) }));
+  assert.match(texto, /Nota 4\.6/);
+  assert.doesNotMatch(texto, /vendidos/);
+});

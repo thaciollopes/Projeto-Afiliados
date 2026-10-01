@@ -22,6 +22,7 @@ export const VARIAVEIS_DISPONIVEIS = [
   { nome: 'desconto_valor', descricao: 'Desconto em R$' },
   { nome: 'cupom', descricao: 'Codigo do cupom' },
   { nome: 'desconto_cupom', descricao: 'Quanto o cupom abate em R$' },
+  { nome: 'cupom_loja', descricao: 'Aviso de cupom da propria loja (Mercado Livre "com Cupom"), quando nao ha cupom cadastrado' },
   { nome: 'avaliacao', descricao: 'Nota do produto' },
   { nome: 'vendas', descricao: 'Quantidade vendida' },
   { nome: 'link', descricao: 'Link de afiliado (cai no original se nao houver)' },
@@ -54,6 +55,11 @@ export function buildContext({
     desconto_valor: money(pricing.desconto_valor),
     cupom: cupom?.codigo || '',
     desconto_cupom: money(pricing.desconto_cupom),
+    // O ML mostra "com Cupom" na oferta mas nao publica codigo: o cupom se ativa
+    // na pagina do produto. Avisar e o que da para fazer sem inventar codigo/valor.
+    cupom_loja: !cupom?.codigo && (product.tags || []).includes('cupom-ml')
+      ? 'Tem cupom no Mercado Livre: ative na pagina do produto antes de pagar'
+      : '',
     avaliacao: product.avaliacao ? `${Number(product.avaliacao).toFixed(1)}` : '',
     vendas: product.quantidade_vendas ? String(product.quantidade_vendas) : '',
     link: product.url_final || product.url_afiliado || product.url_original || '',
@@ -148,9 +154,11 @@ export const DEFAULT_TEMPLATE_BODY = [
   '',
   '🏷️ Cupom: *{cupom}*',
   '💸 Desconto do cupom: {desconto_cupom}',
+  '🎟️ {cupom_loja}',
   '',
   '🚚 {frete}',
-  '⭐ {avaliacao} | 🛒 {vendas} vendidos',
+  '⭐ Nota {avaliacao}',
+  '🛒 {vendas} vendidos',
   '⏰ Valido ate {validade}',
   '',
   '👉 {link}',

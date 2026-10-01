@@ -145,6 +145,18 @@ export function selectProducts(campanha, { limite = 50 } = {}) {
   return queryProducts(filtros, limite);
 }
 
+/**
+ * "perfume feminino, escova progressiva, -masculino" -> incluir/excluir.
+ * Separado por virgula; cada pedaco vale como frase inteira.
+ */
+export function lerPalavras(texto) {
+  const pedacos = String(texto || '').split(/[,;\n]/).map((p) => p.trim()).filter(Boolean);
+  return {
+    incluir: pedacos.filter((p) => !p.startsWith('-')),
+    excluir: pedacos.filter((p) => p.startsWith('-')).map((p) => p.slice(1).trim()).filter(Boolean),
+  };
+}
+
 /** Consulta produtos cadastrados a partir de um objeto de filtros da UI. */
 export function queryProducts(filtros = {}, limite = 50) {
   const where = { status: 'ativo', disponibilidade: 'disponivel' };
@@ -172,9 +184,23 @@ export function queryProducts(filtros = {}, limite = 50) {
     score: 'score DESC',
   };
 
+  const { incluir, excluir } = lerPalavras(filtros.termo || filtros.palavras_chave || '');
+  // Qualquer uma das palavras serve (OU); a com "-" na frente tira o produto.
+  // COALESCE: NOT (NULL LIKE ...) da NULL e sumiria com o produto sem descricao.
+  const campos = ['titulo_original', 'titulo_publicacao', 'descricao_original'];
+  const algumCampo = `(${campos.map((c) => `COALESCE(${c}, '') LIKE ?`).join(' OR ')})`;
+  if (incluir.length) {
+    raw.push({
+      sql: incluir.map(() => algumCampo).join(' OR '),
+      params: incluir.flatMap((p) => campos.map(() => `%${p}%`)),
+    });
+  }
+  for (const palavra of excluir) {
+    raw.push({ sql: `NOT ${algumCampo}`, params: campos.map(() => `%${palavra}%`) });
+  }
+
   const { rows } = productRepository.findAll({
     filters: where,
-    search: filtros.termo || filtros.palavras_chave || '',
     sort: ordenacoes[filtros.ordenacao] || ordenacoes.score,
     limit: limite,
     raw,

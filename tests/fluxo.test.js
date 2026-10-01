@@ -394,6 +394,25 @@ test('"hoje" começa à meia-noite de São Paulo, não às 21h da véspera', asy
   assert.equal(inicioDoDiaIso(new Date('2026-09-28T12:00:00Z'), 'America/Sao_Paulo'), '2026-09-28T03:00:00.000Z');
 });
 
+test('palavras-chave: vírgula vale como "ou" e "-" tira o produto', () => {
+  assert.deepEqual(campanhas.lerPalavras('perfume feminino, skincare , -masculino'), {
+    incluir: ['perfume feminino', 'skincare'], excluir: ['masculino'],
+  });
+  const criar = (t, i) => produtos.createProduct({
+    marketplace: 'demo', external_id: `PAL-${i}`, titulo_original: t, preco_atual: 50, url_original: `https://exemplo.demo/pal${i}`,
+  });
+  const fem = criar('Perfume Feminino Floral 100ml', 1);
+  const kit = criar('Kit Skincare Vitamina C', 2);
+  const masc = criar('Perfume Masculino Amadeirado', 3);
+  const furadeira = criar('Furadeira de impacto', 4);
+
+  const ids = campanhas.queryProducts({ termo: 'perfume, skincare, -masculino' }, 50).map((p) => p.id);
+  assert.ok(ids.includes(fem.id));
+  assert.ok(ids.includes(kit.id));
+  assert.ok(!ids.includes(masc.id), 'excluído pelo -masculino');
+  assert.ok(!ids.includes(furadeira.id), 'só entra quem tem alguma das palavras');
+});
+
 test.after(() => {
   closeDb();
   for (const sufixo of ['', '-wal', '-shm']) {

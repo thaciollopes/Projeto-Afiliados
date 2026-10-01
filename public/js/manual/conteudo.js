@@ -390,6 +390,7 @@ export const SECOES = [
           '<strong>Campanhas → + Nova campanha</strong>.',
           'Escolha o <strong>modo</strong>: lista fixa, por filtros, por pesquisa salva, por categoria, por palavras, só em promoção, só com cupom ou ofertas do dia.',
           'Defina template, grupos, intervalo, horário e <strong>não repetir por</strong> (dias até o mesmo produto voltar no mesmo grupo).',
+          '<strong>Palavras-chave</strong>: separe por vírgula e o produto entra se tiver <em>qualquer</em> uma no título. Um <code>-</code> na frente tira o produto. Ex.: <code>perfume, skincare, escova progressiva, -masculino</code>.',
           'Salve <strong>pausada</strong>. Clique em 👁️ para ver os produtos que ela pegaria e em ▶️ para rodar uma rodada de teste.',
           'Conferiu na Fila? Ative a campanha.',
         ],
