@@ -71,10 +71,22 @@ export function parseCookies(entrada) {
   if (!uteis.length) throw badRequest('Não encontrei cookies de sessão válidos no que foi colado.');
 
   const dominios = [...new Set(uteis.map((c) => c.domain).filter(Boolean))];
-  const validades = uteis.map((c) => c.expires).filter(Boolean);
-  const expiraEm = validades.length ? new Date(Math.min(...validades) * 1000).toISOString() : null;
+  return { cookies: uteis, dominios, expira_em: validadeDaSessao(uteis) };
+}
 
-  return { cookies: uteis, dominios, expira_em: expiraEm };
+const UM_DIA_S = 86400;
+
+/**
+ * Quando a sessão deixa de valer, para o aviso da tela. Não é o cookie que
+ * vence primeiro: o ML manda banner/analytics que duram 10–30 min, e a sessão
+ * aparecia "vencida" logo depois de salva com o login valendo por semanas.
+ * Cookie de menos de 1 dia não conta, e o mínimo mostrado é 1 dia após salvar.
+ */
+export function validadeDaSessao(cookies, salvoEm = new Date()) {
+  const base = Math.floor(new Date(salvoEm).getTime() / 1000);
+  const duradouros = cookies.map((c) => c.expires).filter((e) => e && e >= base + UM_DIA_S);
+  if (!duradouros.length) return null;
+  return new Date(Math.max(Math.min(...duradouros), base + UM_DIA_S) * 1000).toISOString();
 }
 
 function normalizarSameSite(valor) {
@@ -122,14 +134,16 @@ export function resumoSessao(loja) {
   const guardada = settingRepository.get(`${PREFIXO}${loja}`);
   if (!guardada) return { loja, configurada: false };
 
-  const expirou = guardada.expira_em ? new Date(guardada.expira_em) < new Date() : false;
+  // Recalcula: sessões salvas antes da correção guardaram a validade do banner.
+  const expiraEm = validadeDaSessao(guardada.cookies || [], guardada.salvo_em || new Date());
+  const expirou = expiraEm ? new Date(expiraEm) < new Date() : false;
   return {
     loja,
     configurada: true,
     total_cookies: guardada.total,
     dominios: guardada.dominios,
     salvo_em: guardada.salvo_em,
-    expira_em: guardada.expira_em,
+    expira_em: expiraEm,
     expirou,
     // Só os nomes: ajuda a conferir se veio a sessão certa, sem expor valor.
     nomes: (guardada.cookies || []).map((c) => c.name).slice(0, 25),

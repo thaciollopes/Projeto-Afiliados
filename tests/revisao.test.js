@@ -24,7 +24,7 @@ const campanhas = await import('../src/core/services/campaignService.js');
 const verificacao = await import('../src/core/services/verificacaoLinkService.js');
 const { ehUrlDeLoja, ehEncurtador, ehLinkDeAfiliadoCurto, lojaDaUrl } = await import('../src/core/services/affiliateLinkService.js');
 const { salvarTagDaLoja } = await import('../src/core/services/lojaService.js');
-const { salvarSessao, cookiesDaSessao } = await import('../src/core/services/sessaoLojaService.js');
+const { salvarSessao, cookiesDaSessao, resumoSessao } = await import('../src/core/services/sessaoLojaService.js');
 const { importProducts, expireStaleProducts } = await import('../src/core/services/productService.js');
 const { linkParaCanal } = await import('../src/core/services/linkPorCanalService.js');
 const { criarCanal } = await import('../src/core/services/canalService.js');
@@ -221,6 +221,18 @@ test('cookie com "–" na última busca do ML não derruba a sessão (ByteString
   assert.doesNotThrow(() => new Headers({ cookie: cabecalho }));
   assert.match(cabecalho, /LAST_SEARCH=perfume %E2%80%93 feminino/);
   assert.match(cabecalho, /ssid=abc/);
+});
+
+test('cookie de banner que vence em minutos não deixa a sessão "vencida" (mínimo 1 dia)', () => {
+  const agora = Math.floor(Date.now() / 1000);
+  salvarSessao('mercadolivre', JSON.stringify([
+    { name: 'hide-cookie-banner', value: '1', domain: '.mercadolivre.com.br', expirationDate: agora + 600 },
+    { name: 'ssid', value: 'x', domain: '.mercadolivre.com.br', expirationDate: agora + 30 * 86400 },
+  ]));
+  const r = resumoSessao('mercadolivre');
+  assert.equal(r.expirou, false);
+  const dias = (Date.parse(r.expira_em) - Date.now()) / 86400000;
+  assert.ok(dias > 29 && dias <= 30, `validade do login, não do banner: ${dias}`);
 });
 
 test.after(() => {
