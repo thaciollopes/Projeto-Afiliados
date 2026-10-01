@@ -269,6 +269,7 @@ export const SECOES = [
         itens: [
           'Clique em 👁️ num produto para ver o post exatamente como vai sair e mandar um teste.',
           '<strong>Pesquisas salvas</strong> viram campanha em dois cliques.',
+          '<strong>🤖 Buscar sozinho</strong> (em Procurar produtos): o sistema repete a busca a cada 2–24 h e importa o que achar, já com o link de afiliado. As campanhas pegam os produtos novos sozinhas — é o jeito de tudo andar sem você.',
         ],
       },
     ],

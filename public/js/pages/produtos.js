@@ -1,6 +1,6 @@
 import { api } from '../api.js';
 import {
-  el, escapar, moeda, dataCurta, modal, formulario, confirmar, tentar, ok, erro,
+  el, escapar, moeda, dataCurta, dataHora, modal, formulario, confirmar, tentar, ok, erro,
   tabela, acoes, statusEtiqueta, previewWhatsApp, etiqueta,
 } from '../ui.js';
 
@@ -546,7 +546,8 @@ export async function renderBuscar() {
       </div>
       <div class="linha">
         <button class="btn-primario" id="b-buscar">🔍 Buscar</button>
-        <button class="btn" id="b-salvar-pesquisa">💾 Salvar esta pesquisa</button>
+        <button class="btn" id="b-salvar-pesquisa" data-dica="Guarda os filtros para usar numa campanha (filtra produtos que já estão no sistema)">💾 Salvar esta pesquisa</button>
+        <button class="btn" id="b-auto" data-dica="O sistema repete esta busca sozinho de tempos em tempos e importa o que achar">🤖 Buscar sozinho</button>
       </div>
       <p class="pequeno texto-fraco mt">
         Amazon: busca normal. Mercado Livre: o sistema varre as <strong>ofertas</strong> do ML
@@ -557,8 +558,97 @@ export async function renderBuscar() {
     </div>`);
   tela.appendChild(painel);
 
+  const coleta = el('<div class="cartao mt"></div>');
+  tela.appendChild(coleta);
+
   const area = el('<div class="mt"></div>');
   tela.appendChild(area);
+
+  const nomeLoja = (id) => marketplaces.find((m) => m.nome === id)?.rotulo || id;
+  const nomeCategoriaMl = (id) => (marketplaces.find((m) => m.nome === 'mercadolivre')?.categorias || [])
+    .find(([c]) => c === id)?.[1];
+
+  async function desenharColeta() {
+    const c = await api.get('/produtos/coleta-auto').catch(() => null);
+    if (!c) { coleta.hidden = true; return; }
+    const r = c.ultimo_resultado;
+    const proxima = c.ativa && c.ultima_execucao
+      ? new Date(Date.parse(c.ultima_execucao) + c.intervalo_horas * 3600000) : null;
+    coleta.innerHTML = `
+      <div class="cartao-titulo">
+        <div><h2>🤖 Coleta automática ${c.ativa ? etiqueta('ligada', 'ok') : etiqueta('desligada')}</h2>
+        <p>O sistema repete estas buscas sozinho e importa o que achar. As campanhas pegam os produtos novos
+           na próxima rodada — você não precisa fazer nada.</p></div>
+        <div class="linha">
+          <select id="c-horas" data-dica="De quanto em quanto tempo buscar">
+            ${[2, 4, 6, 12, 24].map((h) => `<option value="${h}" ${Number(c.intervalo_horas) === h ? 'selected' : ''}>a cada ${h}h</option>`).join('')}
+          </select>
+          <button class="btn" id="c-ligar">${c.ativa ? '⏸️ Desligar' : '✅ Ligar'}</button>
+          <button class="btn" id="c-rodar" ${c.buscas.length ? '' : 'disabled'} data-dica="Busca e importa agora, sem esperar o horário">▶️ Rodar agora</button>
+        </div>
+      </div>
+      ${c.buscas.length ? `<div class="tabela-caixa"><table><thead><tr>
+          <th>Loja</th><th>Palavras</th><th>Filtros</th><th>Última vez</th><th></th></tr></thead><tbody>
+        ${c.buscas.map((b) => {
+    const ult = r?.buscas?.find((x) => x.id === b.id);
+    const filtros = [
+      b.categoria_loja && nomeCategoriaMl(b.categoria_loja),
+      b.desconto_min && `desconto ≥ ${b.desconto_min}%`,
+      b.preco_max && `até ${moeda(b.preco_max)}`,
+      `${b.limite} por vez`,
+    ].filter(Boolean).join(' · ');
+    return `<tr>
+          <td>${escapar(nomeLoja(b.loja))}</td>
+          <td>${b.termo ? `<strong>${escapar(b.termo)}</strong>` : '<span class="texto-fraco">ofertas do dia</span>'}</td>
+          <td class="pequeno texto-fraco">${escapar(filtros)}</td>
+          <td class="pequeno">${ult ? (ult.erro ? `<span style="color:var(--erro)">❌ ${escapar(ult.erro)}</span>`
+            : `${ult.encontrados} achados · <strong>${ult.criados} novos</strong>`) : '<span class="texto-fraco">ainda não rodou</span>'}</td>
+          <td class="acoes"><button class="btn-pequeno btn-perigo" data-remover-busca="${b.id}" data-dica="Parar de buscar isto">🗑️</button></td>
+        </tr>`;
+  }).join('')}</tbody></table></div>`
+    : '<p class="texto-fraco">Nenhuma busca automática ainda. Preencha a busca acima e clique em <strong>🤖 Buscar sozinho</strong>.</p>'}
+      <p class="pequeno texto-fraco mt">
+        ${c.ultima_execucao ? `Última coleta: ${dataHora(c.ultima_execucao)}${r ? ` — ${r.criados} produtos novos, ${r.atualizados} atualizados` : ' (rodando…)'}.` : 'Ainda não rodou.'}
+        ${proxima ? ` Próxima: ${dataHora(proxima.toISOString())}.` : ''}
+      </p>`;
+
+    coleta.querySelector('#c-horas').onchange = async (e) => {
+      await tentar(() => api.put('/produtos/coleta-auto', { intervalo_horas: Number(e.target.value) }), 'Frequência salva');
+      desenharColeta();
+    };
+    coleta.querySelector('#c-ligar').onclick = async () => {
+      await tentar(() => api.put('/produtos/coleta-auto', { ativa: !c.ativa }), c.ativa ? 'Coleta desligada' : 'Coleta ligada');
+      desenharColeta();
+    };
+    coleta.querySelector('#c-rodar').onclick = async () => {
+      const ok1 = await tentar(() => api.post('/produtos/coleta-auto/rodar', {}));
+      if (!ok1) return;
+      ok('Coleta começou. Leva alguns minutos; o resultado aparece aqui.');
+      setTimeout(desenharColeta, 1500);
+      setTimeout(desenharColeta, 60000);
+    };
+    for (const b of coleta.querySelectorAll('[data-remover-busca]')) {
+      b.onclick = async () => {
+        await tentar(() => api.del(`/produtos/coleta-auto/buscas/${b.dataset.removerBusca}`), 'Busca removida');
+        desenharColeta();
+      };
+    }
+  }
+  desenharColeta();
+
+  painel.querySelector('#b-auto').onclick = async () => {
+    const f = filtrosAtuais();
+    const loja = marketplaces.find((m) => m.nome === f.marketplaces[0]);
+    if (loja && !loja.implementado) { erro(`${loja.rotulo}: o sistema não busca sozinho nesta loja (só pela extensão).`); return; }
+    const r = await tentar(() => api.post('/produtos/coleta-auto/buscas', {
+      loja: f.marketplaces[0], termo: f.termo, categoria_loja: f.categoria_loja,
+      desconto_min: f.descontoMin, preco_max: f.precoMax, ordenacao: f.ordenacao, limite: f.limite,
+    }));
+    if (r) {
+      ok(`Pronto: o sistema vai buscar "${f.termo || 'ofertas do dia'}" sozinho a cada ${r.intervalo_horas}h.`);
+      desenharColeta();
+    }
+  };
 
   const selecionados = new Set();
   let ultimos = [];

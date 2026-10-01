@@ -12,6 +12,7 @@ import { processQueue } from '../core/services/publicationService.js';
 import { expireCoupons } from '../core/services/couponService.js';
 import { expirePromotions } from '../core/services/promotionService.js';
 import { sincronizarVitrine } from '../core/services/vitrineService.js';
+import { coletaPendente, executarColeta } from '../core/services/coletaAutomaticaService.js';
 import { logger } from '../core/utils/logger.js';
 
 const log = logger.child('worker');
@@ -51,6 +52,12 @@ export async function tick() {
       ultimaManutencao = Date.now();
       expireCoupons();
       expirePromotions();
+    }
+
+    // Coleta nas lojas pode levar minutos (varias paginas do ML): roda solta,
+    // sem segurar a fila. executarColeta tem trava propria contra rodar dobrado.
+    if (coletaPendente()) {
+      executarColeta().catch((err) => log.error(`Coleta automatica falhou: ${err.message}`));
     }
 
     await runActiveCampaigns();

@@ -462,6 +462,28 @@ test('lote: 3 produtos por rodada saem em sequência, sem esperar o intervalo do
   assert.equal(prog.produtos_por_rodada, 3);
 });
 
+test('coleta automática: liga na primeira busca, respeita o intervalo e não roda dobrado', async () => {
+  const coleta = await import('../src/core/services/coletaAutomaticaService.js');
+  coleta.salvarColeta({ ativa: false, buscas: [], intervalo_horas: 1 });
+  assert.equal(coleta.configColeta().intervalo_horas, coleta.MIN_HORAS, 'menos que o mínimo vira o mínimo');
+  assert.equal(coleta.coletaPendente(), false, 'sem busca não coleta');
+
+  const cfg = coleta.adicionarBusca({ loja: 'loja-sem-adaptador', termo: 'perfume feminino', limite: 999 });
+  assert.equal(cfg.ativa, true, 'a primeira busca liga a coleta');
+  assert.equal(cfg.buscas[0].limite, 50, 'teto de 50 por busca');
+  assert.equal(coleta.coletaPendente(), true, 'nunca rodou: roda já');
+
+  const r = await coleta.executarColeta();
+  assert.equal(r.buscas.length, 1);
+  assert.equal(coleta.coletaPendente(), false, 'acabou de rodar: espera o intervalo');
+  const daqui3h = Date.now() + 3 * 3600000;
+  assert.equal(coleta.coletaPendente(coleta.configColeta(), daqui3h), true);
+  assert.deepEqual(await coleta.executarColeta(), { pulado: 'fora_do_intervalo' });
+
+  coleta.removerBusca(cfg.buscas[0].id);
+  assert.equal(coleta.configColeta().buscas.length, 0);
+});
+
 test.after(() => {
   closeDb();
   for (const sufixo of ['', '-wal', '-shm']) {

@@ -13,6 +13,9 @@ import { converterImportados } from '../../core/services/linkPorCookieService.js
 import { listMarketplaces } from '../../integrations/marketplaces/index.js';
 import { lerProgresso } from '../../core/services/progressoBuscaService.js';
 import { situacoesDosLinks } from '../../core/services/verificacaoLinkService.js';
+import {
+  configColeta, salvarColeta, adicionarBusca, removerBusca, executarColeta,
+} from '../../core/services/coletaAutomaticaService.js';
 
 export const produtosRouter = Router();
 
@@ -67,6 +70,30 @@ produtosRouter.post('/importar', asyncHandler(async (req, res) => {
   const conversao = await converterImportados(produtos, resultado.ids);
   const { ids: _ids, ...resposta } = resultado;
   res.status(201).json({ ...resposta, conversao });
+}));
+
+// ------------------------------------------------- coleta automatica --
+
+produtosRouter.get('/coleta-auto', asyncHandler(async (_req, res) => {
+  res.json(configColeta());
+}));
+
+produtosRouter.put('/coleta-auto', asyncHandler(async (req, res) => {
+  res.json(salvarColeta(req.body || {}));
+}));
+
+produtosRouter.post('/coleta-auto/buscas', asyncHandler(async (req, res) => {
+  res.status(201).json(adicionarBusca(req.body || {}));
+}));
+
+produtosRouter.delete('/coleta-auto/buscas/:id', asyncHandler(async (req, res) => {
+  res.json(removerBusca(req.params.id));
+}));
+
+/** Roda agora em segundo plano (pode levar minutos); a tela acompanha pelo GET. */
+produtosRouter.post('/coleta-auto/rodar', asyncHandler(async (_req, res) => {
+  executarColeta({ forcar: true }).catch(() => { /* resultado e alerta ficam gravados */ });
+  res.status(202).json({ iniciada: true });
 }));
 
 produtosRouter.post('/recalcular-score', asyncHandler(async (_req, res) => {
