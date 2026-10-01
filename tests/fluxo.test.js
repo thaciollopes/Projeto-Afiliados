@@ -413,6 +413,55 @@ test('palavras-chave: vírgula vale como "ou" e "-" tira o produto', () => {
   assert.ok(!ids.includes(furadeira.id), 'só entra quem tem alguma das palavras');
 });
 
+test('lote: 3 produtos por rodada saem em sequência, sem esperar o intervalo do grupo, e a tela mostra o progresso', async () => {
+  const grupo = repos.channelRepository.create({
+    nome: 'Lote', identificador: 'lote@g.us', status: 'ativo', hora_inicio: '00:00', hora_fim: '23:59',
+    intervalo_minutos: 60, limite_diario: 4,
+  });
+  for (let i = 1; i <= 6; i += 1) {
+    produtos.createProduct({
+      marketplace: 'demo', external_id: `LOTE-${i}`, titulo_original: `Batom lote ${i}`, preco_atual: 20 + i,
+      url_original: `https://exemplo.demo/lote${i}`,
+    });
+  }
+  const campanha = campanhas.createCampaign({
+    nome: 'Lote', modo: 'palavras', status: 'ativa', filtros: { termo: 'batom lote' }, canais: [grupo.id],
+    produtos_por_rodada: 3, limite_diario: 50, template_id: template.id,
+  });
+
+  const r = await campanhas.runCampaign(campanha, { forcar: true });
+  assert.equal(r.enfileiradas, 3);
+  const doLote = repos.publicationRepository.list({ filters: { channel_id: grupo.id } });
+  assert.equal(new Set(doLote.map((p) => p.lote)).size, 1, 'os 3 do mesmo lote');
+
+  // Grupo acabou de receber um post do lote: o próximo do mesmo lote não espera 60 min.
+  repos.publicationRepository.update(doLote[0].id, { status: 'enviado', enviado_em: new Date().toISOString() });
+  repos.channelRepository.update(grupo.id, { ultimo_envio: new Date().toISOString() });
+  const dryRun = config.runtime.dryRun;
+  config.runtime.dryRun = false;
+  publicacoes.zerarPausaEntreEnvios();
+  try {
+    const fila = await publicacoes.processQueue({ limite: 10 });
+    const doGrupo = fila.detalhes.filter((d) => doLote.some((p) => p.id === d.id));
+    assert.ok(!doGrupo.some((d) => d.motivo === 'aguardando_intervalo_grupo'), 'lote não espera o intervalo do grupo');
+    assert.ok(doGrupo.some((d) => d.status === 'enviada'), 'o próximo do lote saiu');
+  } finally {
+    config.runtime.dryRun = dryRun;
+    publicacoes.zerarPausaEntreEnvios();
+  }
+
+  // Limite do grupo = 4: pedindo 5, só entra o que ainda cabe hoje.
+  const ocupadas = repos.publicationRepository.count({ channel_id: grupo.id, status: ['enviado', 'aguardando', 'enviando'] });
+  const r2 = await campanhas.runCampaign(campanha, { forcar: true, quantidade: 5 });
+  assert.equal(r2.enfileiradas, 4 - ocupadas, 'não passa do máximo por dia do grupo');
+
+  const prog = campanhas.campaignProgress(campanhas.getCampaign(campanha.id));
+  assert.equal(prog.produtos.total, 6);
+  assert.equal(prog.produtos.postados + prog.produtos.na_fila + prog.produtos.restantes, 6);
+  assert.equal(prog.produtos.postados, repos.publicationRepository.count({ channel_id: grupo.id, status: 'enviado' }));
+  assert.equal(prog.produtos_por_rodada, 3);
+});
+
 test.after(() => {
   closeDb();
   for (const sufixo of ['', '-wal', '-shm']) {

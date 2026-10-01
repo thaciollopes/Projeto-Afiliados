@@ -17,6 +17,8 @@ const MODOS = [
 
 const DIAS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 
+const QUANTIDADES = [1, 2, 3, 5, 10].map((n) => ({ valor: n, rotulo: n === 1 ? '1 produto' : `${n} produtos` }));
+
 export async function renderCampanhas() {
   const [templates, canais, pesquisas] = await Promise.all([
     api.get('/templates', { limite: 50 }),
@@ -53,14 +55,13 @@ export async function renderCampanhas() {
         { rotulo: 'Ritmo', render: (c) => `a cada ${c.intervalo_minutos}min<br>
             <span class="pequeno texto-fraco">${c.hora_inicio}–${c.hora_fim}${c.loop ? ' · loop' : ''}</span>` },
         { rotulo: 'Repetição', render: (c) => (c.nao_repetir_dias ? `não repete por ${c.nao_repetir_dias}d` : 'pode repetir') },
-        { rotulo: 'Publicado', render: (c) => `${c.total_publicado || 0}<br>
-            <span class="pequeno texto-fraco">${c.ultima_execucao ? dataHora(c.ultima_execucao) : 'nunca'}</span>` },
+        { rotulo: 'Progresso', render: (c) => barraProgresso(c) },
         { rotulo: 'Status', render: (c) => statusEtiqueta(c.status) },
         {
           rotulo: 'Ações', classe: 'acoes',
           render: (c) => acoes([
             { rotulo: '👁️', titulo: 'Ver produtos que ela pegaria', aoClicar: () => verProdutos(c) },
-            { rotulo: '▶️', titulo: 'Rodar agora (1 rodada)', aoClicar: () => rodar(c) },
+            { rotulo: '▶️', titulo: 'Disparar agora (escolher quantos produtos)', aoClicar: () => disparar(c) },
             {
               rotulo: c.status === 'ativa' ? '⏸️' : '✅',
               titulo: c.status === 'ativa' ? 'Pausar' : 'Ativar',
@@ -85,8 +86,26 @@ export async function renderCampanhas() {
     }));
   }
 
-  async function rodar(campanha) {
-    const r = await tentar(() => api.post(`/campanhas/${campanha.id}/executar`, { forcar: true }));
+  function disparar(campanha) {
+    const form = formulario([{
+      nome: 'quantidade', rotulo: 'Quantos produtos por grupo', tipo: 'select', opcoes: QUANTIDADES,
+      dica: 'saem um depois do outro, com pausa de ~1 min entre eles; respeita o máximo por dia do grupo',
+    }], { quantidade: campanha.produtos_por_rodada || 1 });
+    modal({
+      titulo: `Disparar "${campanha.nome}" agora`,
+      corpo: form,
+      acoes: [
+        { rotulo: 'Cancelar' },
+        {
+          rotulo: '🚀 Disparar', classe: 'btn-primario', principal: true,
+          aoClicar: () => rodar(campanha, Number(form.ler().quantidade) || 1),
+        },
+      ],
+    });
+  }
+
+  async function rodar(campanha, quantidade) {
+    const r = await tentar(() => api.post(`/campanhas/${campanha.id}/executar`, { forcar: true, quantidade }));
     if (!r) return;
     if (r.enfileiradas) ok(`${r.enfileiradas} publicação(ões) na fila`);
     else {
@@ -102,11 +121,14 @@ export async function renderCampanhas() {
     modal({ titulo: `Produtos de "${campanha.nome}"`, corpo, acoes: [{ rotulo: 'Fechar' }] });
     const r = await api.get(`/campanhas/${campanha.id}/produtos`, { limite: 50 });
     corpo.classList.remove('carregando');
-    corpo.innerHTML = `<p class="pequeno texto-fraco">${r.rows.length} produto(s) entrariam nesta campanha agora.</p>`;
+    const postados = r.rows.filter((p) => p.situacao?.postado_em).length;
+    corpo.innerHTML = `<p class="pequeno texto-fraco">${r.rows.length} produto(s) nesta campanha · ${postados} já postado(s)
+      nos últimos ${campanha.nao_repetir_dias || 0} dia(s) — esses só voltam depois desse prazo.</p>`;
     corpo.appendChild(tabela({
       vazio: 'Nenhum produto bate com os filtros desta campanha.',
       colunas: [
         { rotulo: 'Produto', render: (p) => escapar(p.titulo_original) },
+        { rotulo: 'Situação', render: (p) => situacaoProduto(p.situacao) },
         { rotulo: 'Preço', render: (p) => moeda(p.preco_atual) },
         { rotulo: 'Desc.', render: (p) => (p.desconto_percentual ? `${p.desconto_percentual}%` : '—') },
         { rotulo: 'Score', render: (p) => Math.round(p.score || 0) },
@@ -146,6 +168,10 @@ export async function renderCampanhas() {
       { nome: 'hora_fim', rotulo: 'Hora final', dica: 'HH:MM' },
       { nome: 'limite_diario', rotulo: 'Máximo por dia', tipo: 'number' },
       {
+        nome: 'produtos_por_rodada', rotulo: 'Produtos por rodada', tipo: 'select', opcoes: QUANTIDADES,
+        dica: 'quantos saem de uma vez a cada intervalo (com pausa de ~1 min entre eles)',
+      },
+      {
         nome: 'nao_repetir_dias', rotulo: 'Não repetir produto por', tipo: 'select',
         opcoes: [
           { valor: 0, rotulo: 'pode repetir' }, { valor: 1, rotulo: '1 dia' }, { valor: 3, rotulo: '3 dias' },
@@ -166,7 +192,7 @@ export async function renderCampanhas() {
       f_avaliacao_min: filtros.avaliacao_min, f_ordenacao: filtros.ordenacao || 'score',
     } : {
       modo: 'automatica', intervalo_minutos: 30, hora_inicio: '08:00', hora_fim: '22:00',
-      limite_diario: 20, nao_repetir_dias: 7, loop: true, f_ordenacao: 'score',
+      limite_diario: 20, nao_repetir_dias: 7, loop: true, f_ordenacao: 'score', produtos_por_rodada: 1,
     };
 
     const form = formulario(campos, valores);
@@ -209,6 +235,7 @@ export async function renderCampanhas() {
               hora_inicio: dados.hora_inicio || '08:00',
               hora_fim: dados.hora_fim || '22:00',
               limite_diario: Number(dados.limite_diario) || 20,
+              produtos_por_rodada: Number(dados.produtos_por_rodada) || 1,
               nao_repetir_dias: Number(dados.nao_repetir_dias) || 0,
               loop: dados.loop, usar_ia: dados.usar_ia,
               filtros: {
@@ -246,6 +273,38 @@ export async function renderCampanhas() {
   }
 
   return tela;
+}
+
+function barra(feito, fila, total) {
+  const pct = (n) => (total ? Math.min(100, Math.round((n / total) * 100)) : 0);
+  return `<div class="progresso-trilho"><span class="feito" style="width:${pct(feito)}%"></span>
+    <span class="fila" style="width:${Math.min(pct(fila), 100 - pct(feito))}%"></span></div>`;
+}
+
+function barraProgresso(c) {
+  const p = c.progresso;
+  if (!p) return `${c.total_publicado || 0}`;
+  const { hoje, produtos } = p;
+  const extrasHoje = [
+    hoje.na_fila ? `${hoje.na_fila} na fila` : '',
+    hoje.erros ? `<span style="color:var(--erro)">${hoje.erros} erro(s)</span>` : '',
+  ].filter(Boolean).join(' · ');
+  return `
+    <div class="progresso" title="Verde: enviadas hoje. Roxo: na fila.">
+      ${barra(hoje.enviadas, hoje.na_fila, hoje.limite || Math.max(hoje.enviadas + hoje.na_fila, 1))}
+      <div class="progresso-texto">Hoje: <strong>${hoje.enviadas}${hoje.limite ? ` de ${hoje.limite}` : ''}</strong> enviadas${extrasHoje ? ` · ${extrasHoje}` : ''}</div>
+    </div>
+    <div class="progresso" title="Produtos da campanha já postados dentro do prazo de não repetir.">
+      ${barra(produtos.postados, produtos.na_fila, produtos.total)}
+      <div class="progresso-texto">Produtos: <strong>${produtos.postados} de ${produtos.total}</strong> postados · ${produtos.restantes} faltam</div>
+    </div>
+    <div class="progresso-texto">${p.total_publicado} no total · ${p.produtos_por_rodada} por rodada${c.ultima_execucao ? ` · última ${dataHora(c.ultima_execucao)}` : ''}</div>`;
+}
+
+function situacaoProduto(s) {
+  if (s?.postado_em) return etiqueta(`✅ postado ${dataHora(s.postado_em)}`, 'ok');
+  if (s?.na_fila) return etiqueta('⏱️ na fila', 'info');
+  return '<span class="texto-fraco pequeno">ainda não</span>';
 }
 
 function rotuloModo(modo) {

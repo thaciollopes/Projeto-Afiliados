@@ -221,7 +221,7 @@ export function isDuplicate(productId, channelId, dias = 7) {
 export async function enqueue({
   product_id, channel_id, campaign_id = null, promotion_id = null, coupon_id = null,
   template_id = null, usar_ia = false, agendado_para = null, origem = 'app', dry_run = null,
-  ignorar_duplicado = false, nao_repetir_dias = 7,
+  ignorar_duplicado = false, nao_repetir_dias = 7, lote = null,
 } = {}) {
   const canal = channelRepository.findById(channel_id);
   if (!canal) throw notFound('Canal');
@@ -239,6 +239,7 @@ export async function enqueue({
 
   return publicationRepository.create({
     campaign_id,
+    lote,
     product_id,
     promotion_id: post.promocao?.id || null,
     coupon_id: post.cupom?.id || null,
@@ -327,7 +328,9 @@ export async function processQueue({ limite = 10, reference = new Date(), forcar
     const comPausa = !pub.dry_run && !config.runtime.dryRun && precisaPausaAntiBloqueio(canal);
     // Intervalo do grupo vale tambem para o que foi enfileirado a mao: dez
     // produtos jogados no mesmo grupo saindo um por minuto e rajada de robo.
-    if (comPausa && !forcar && canal.intervalo_minutos && canal.ultimo_envio) {
+    // Exceção: o lote que você pediu ("5 de uma vez") sai em sequência, só com
+    // a pausa sorteada entre os envios logo abaixo.
+    if (comPausa && !forcar && canal.intervalo_minutos && canal.ultimo_envio && !continuaLote(pub, canal)) {
       const liberaEm = new Date(canal.ultimo_envio).getTime() + Number(canal.intervalo_minutos) * 60000;
       if (reference.getTime() < liberaEm) {
         resultado.adiadas += 1;
@@ -365,6 +368,17 @@ export async function processQueue({ limite = 10, reference = new Date(), forcar
     log.info(`Fila processada: ${resultado.enviadas} enviadas, ${resultado.erros} erros, ${resultado.adiadas} adiadas`);
   }
   return resultado;
+}
+
+/** O ultimo post que saiu neste grupo e do mesmo lote desta publicacao? */
+function continuaLote(pub, canal) {
+  if (!pub.lote) return false;
+  const ultimo = publicationRepository.findAll({
+    filters: { channel_id: canal.id, status: 'enviado' },
+    sort: 'enviado_em DESC',
+    limit: 1,
+  }).rows[0];
+  return ultimo?.lote === pub.lote;
 }
 
 let proximoEnvioPermitido = 0;

@@ -23,6 +23,25 @@ const log = logger.child('campanha');
 /** Quantos produtos a campanha tenta por grupo quando o primeiro esta bloqueado. */
 const TENTATIVAS_POR_CANAL = 5;
 
+/** Teto do lote: rajada maior que isso num grupo e o que o WhatsApp pune. */
+export const MAX_POR_RODADA = 10;
+
+export function limitarPorRodada(valor) {
+  return Math.min(Math.max(Math.trunc(Number(valor)) || 1, 1), MAX_POR_RODADA);
+}
+
+/**
+ * Quanto ainda cabe hoje no grupo: limite diario menos o que ja saiu e o que
+ * ja esta na fila (senao o lote enche a fila de posts que so sairiam amanha).
+ */
+export function vagasNoGrupo(canal, reference = new Date()) {
+  if (!canal.limite_diario) return Infinity;
+  const inicio = inicioDoDiaIso(reference, config.app.timezone);
+  const enviadas = publicationRepository.count({ channel_id: canal.id, status: 'enviado', enviado_em: { gte: inicio } });
+  const naFila = publicationRepository.count({ channel_id: canal.id, status: ['aguardando', 'enviando'] });
+  return Number(canal.limite_diario) - enviadas - naFila;
+}
+
 export const MODOS = [
   'manual', 'automatica', 'pesquisa', 'categoria', 'palavras',
   'promocoes', 'cupons', 'ofertas_do_dia',
@@ -247,7 +266,7 @@ export function canRunNow(campanha, reference = new Date()) {
  * Executa uma campanha: escolhe produto por canal e enfileira.
  * Nao envia; o worker envia depois respeitando a janela do canal.
  */
-export async function runCampaign(campanha, { reference = new Date(), forcar = false } = {}) {
+export async function runCampaign(campanha, { reference = new Date(), forcar = false, quantidade = null } = {}) {
   const resultado = { campanha: campanha.id, nome: campanha.nome, enfileiradas: 0, ignorados: [], erros: [] };
 
   if (!forcar) {
@@ -260,6 +279,12 @@ export async function runCampaign(campanha, { reference = new Date(), forcar = f
 
   const candidatos = selectProducts(campanha, { limite: 100 });
   if (!candidatos.length) return { ...resultado, ignorado: 'sem_produtos' };
+
+  const porRodada = limitarPorRodada(quantidade ?? campanha.produtos_por_rodada);
+  const lote = `${campanha.id}:${Date.now()}`;
+  let vagasDaCampanha = campanha.limite_diario
+    ? Number(campanha.limite_diario) - publicadasHoje({ campaign_id: campanha.id }, reference)
+    : Infinity;
 
   for (const alvo of alvos) {
     const canal = channelRepository.findById(alvo.channel_id);
@@ -282,6 +307,9 @@ export async function runCampaign(campanha, { reference = new Date(), forcar = f
     }
 
     const dias = Number(campanha.nao_repetir_dias ?? 7);
+    const quantidade = alvo.limite_diario
+      ? Math.min(porRodada, Number(alvo.limite_diario) - publicadasHoje({ campaign_id: campanha.id, channel_id: canal.id }, reference))
+      : porRodada;
     const livres = candidatos.filter((p) => !isDuplicate(p.id, canal.id, dias));
 
     if (!livres.length) {
@@ -295,10 +323,18 @@ export async function runCampaign(campanha, { reference = new Date(), forcar = f
       continue;
     }
 
-    // Produto bloqueado (sem preco, link de outra conta...) nao pode travar o
-    // grupo: antes a campanha escolhia o mesmo primeiro da lista a cada ciclo.
-    // Limite de tentativas porque cada uma pode ir a rede conferir o link.
-    for (const produto of livres.slice(0, TENTATIVAS_POR_CANAL)) {
+    // Lote: N produtos de uma vez (produtos_por_rodada), sem passar do que
+    // ainda cabe hoje no grupo e na campanha. Produto bloqueado (sem preco,
+    // link de outra conta...) e pulado em vez de travar o grupo; o limite de
+    // tentativas existe porque cada uma pode ir a rede conferir o link.
+    const vagas = Math.min(quantidade, vagasNoGrupo(canal, reference), vagasDaCampanha);
+    if (vagas <= 0) {
+      resultado.ignorados.push({ canal: canal.nome, motivo: 'limite_diario' });
+      continue;
+    }
+    let noGrupo = 0;
+    for (const produto of livres.slice(0, vagas + TENTATIVAS_POR_CANAL - 1)) {
+      if (noGrupo >= vagas) break;
       try {
         await enqueue({
           product_id: produto.id,
@@ -308,13 +344,17 @@ export async function runCampaign(campanha, { reference = new Date(), forcar = f
           usar_ia: Boolean(campanha.usar_ia),
           nao_repetir_dias: dias,
           origem: 'campanha',
+          lote,
         });
-        campaignTargetRepository.update(alvo.id, { ultimo_envio: nowIso() });
-        resultado.enfileiradas += 1;
-        break;
+        noGrupo += 1;
       } catch (err) {
         resultado.erros.push({ canal: canal.nome, produto: produto.id, erro: err.message });
       }
+    }
+    if (noGrupo) {
+      campaignTargetRepository.update(alvo.id, { ultimo_envio: nowIso() });
+      resultado.enfileiradas += noGrupo;
+      vagasDaCampanha -= noGrupo;
     }
   }
 
@@ -336,6 +376,61 @@ function publicadasHoje(filtros, reference) {
     status: ['aguardando', 'enviando', 'enviado', 'erro'],
     criado_em: { gte: inicioDoDiaIso(reference, config.app.timezone) },
   });
+}
+
+/**
+ * Barra de progresso da tela: o que saiu hoje, o que esta na fila e quanto da
+ * lista de produtos ja foi postado (dentro do "nao repetir por").
+ */
+export function campaignProgress(campanha, reference = new Date()) {
+  const inicio = inicioDoDiaIso(reference, config.app.timezone);
+  const daCampanha = { campaign_id: campanha.id };
+  const hoje = {
+    enviadas: publicationRepository.count({ ...daCampanha, status: 'enviado', enviado_em: { gte: inicio } }),
+    na_fila: publicationRepository.count({ ...daCampanha, status: ['aguardando', 'enviando'] }),
+    erros: publicationRepository.count({ ...daCampanha, status: 'erro', atualizado_em: { gte: inicio } }),
+    limite: Number(campanha.limite_diario) || null,
+  };
+
+  const alvos = campaignTargetRepository.list({ filters: { campaign_id: campanha.id, ativo: 1 }, limit: 50 });
+  const dias = Number(campanha.nao_repetir_dias ?? 7);
+  const candidatos = selectProducts(campanha, { limite: 100 });
+  const situacoes = situacaoDosProdutos(candidatos, alvos.map((a) => a.channel_id), dias);
+  const postados = candidatos.filter((p) => situacoes[p.id]?.postado_em).length;
+  const naFila = candidatos.filter((p) => situacoes[p.id]?.na_fila && !situacoes[p.id]?.postado_em).length;
+
+  return {
+    hoje,
+    produtos: { total: candidatos.length, postados, na_fila: naFila, restantes: candidatos.length - postados - naFila },
+    total_publicado: Number(campanha.total_publicado || 0),
+    produtos_por_rodada: limitarPorRodada(campanha.produtos_por_rodada),
+  };
+}
+
+/**
+ * Por produto: quando saiu pela ultima vez nesses grupos (dentro da janela de
+ * repeticao) e se esta na fila agora. Uma consulta so, para a lista inteira.
+ */
+export function situacaoDosProdutos(produtos, canais, dias = 7) {
+  const ids = produtos.map((p) => p.id);
+  const resultado = {};
+  if (!ids.length || !canais.length) return resultado;
+  const desde = new Date(Date.now() - Math.max(dias, 0) * 86400000).toISOString();
+  const marcas = (lista) => lista.map(() => '?').join(', ');
+  const linhas = publicationRepository.raw(
+    `SELECT product_id, status, MAX(enviado_em) AS enviado_em FROM publications
+     WHERE product_id IN (${marcas(ids)}) AND channel_id IN (${marcas(canais)})
+       AND (status IN ('aguardando', 'enviando') OR (status = 'enviado' AND enviado_em >= ?))
+     GROUP BY product_id, status`,
+    [...ids, ...canais, desde],
+  );
+  for (const l of linhas) {
+    const atual = resultado[l.product_id] || { postado_em: null, na_fila: false };
+    if (l.status === 'enviado') atual.postado_em = l.enviado_em;
+    else atual.na_fila = true;
+    resultado[l.product_id] = atual;
+  }
+  return resultado;
 }
 
 /** Roda todas as campanhas ativas (chamado pelo worker a cada tick). */

@@ -191,6 +191,7 @@ CREATE TABLE IF NOT EXISTS campaigns (
   loop              INTEGER DEFAULT 1,
   nao_repetir_dias  INTEGER DEFAULT 7,
   limite_diario     INTEGER DEFAULT 20,
+  produtos_por_rodada INTEGER DEFAULT 1,
   usar_ia           INTEGER DEFAULT 0,
   status            TEXT NOT NULL DEFAULT 'pausada',
   ultima_execucao   TEXT,
@@ -228,6 +229,7 @@ CREATE TABLE IF NOT EXISTS saved_searches (
 CREATE TABLE IF NOT EXISTS publications (
   id                    TEXT PRIMARY KEY,
   campaign_id           TEXT,
+  lote                  TEXT,
   product_id            TEXT,
   promotion_id          TEXT,
   coupon_id             TEXT,

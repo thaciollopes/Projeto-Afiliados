@@ -13,6 +13,7 @@ import { channelRepository, publicationRepository } from '../../core/repositorie
 import {
   listCampaigns, getCampaign, createCampaign, updateCampaign, deleteCampaign,
   expandCampaign, runCampaign, selectProducts, canRunNow, runActiveCampaigns,
+  campaignProgress, situacaoDosProdutos,
 } from '../../core/services/campaignService.js';
 import {
   buildPublication, enqueue, processQueue, sendPublication, cancelPublication,
@@ -67,7 +68,9 @@ campanhasRouter.get('/', asyncHandler(async (req, res) => {
   const filtros = {};
   for (const campo of ['status', 'modo']) if (req.query[campo]) filtros[campo] = req.query[campo];
   const resultado = listCampaigns(queryOptions(req, filtros));
-  resultado.rows = resultado.rows.map((c) => ({ ...expandCampaign(c), pode_rodar: canRunNow(c) }));
+  resultado.rows = resultado.rows.map((c) => ({
+    ...expandCampaign(c), pode_rodar: canRunNow(c), progresso: campaignProgress(c),
+  }));
   res.json(resultado);
 }));
 
@@ -79,7 +82,10 @@ campanhasRouter.get('/:id', asyncHandler(async (req, res) => {
 /** Previa: quais produtos esta campanha pegaria agora. */
 campanhasRouter.get('/:id/produtos', asyncHandler(async (req, res) => {
   const campanha = getCampaign(req.params.id);
-  res.json({ rows: selectProducts(campanha, { limite: Number(req.query.limite) || 50 }) });
+  const rows = selectProducts(campanha, { limite: Number(req.query.limite) || 50 });
+  const canais = expandCampaign(campanha).alvos.map((a) => a.channel_id);
+  const situacoes = situacaoDosProdutos(rows, canais, Number(campanha.nao_repetir_dias ?? 7));
+  res.json({ rows: rows.map((p) => ({ ...p, situacao: situacoes[p.id] || { postado_em: null, na_fila: false } })) });
 }));
 
 campanhasRouter.post('/', asyncHandler(async (req, res) => {
@@ -105,7 +111,10 @@ campanhasRouter.post('/:id/pausar', asyncHandler(async (req, res) => {
 /** Roda agora, ignorando intervalo/horario se forcar=true. */
 campanhasRouter.post('/:id/executar', asyncHandler(async (req, res) => {
   const campanha = getCampaign(req.params.id);
-  res.json(await runCampaign(campanha, { forcar: req.body?.forcar !== false }));
+  res.json(await runCampaign(campanha, {
+    forcar: req.body?.forcar !== false,
+    quantidade: req.body?.quantidade ?? null,
+  }));
 }));
 
 /** Chamado pelo n8n: roda todas as campanhas ativas. */
