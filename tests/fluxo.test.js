@@ -553,6 +553,57 @@ test('campanha prioriza produto com cupom (do ML ou cadastrado), mantendo a orde
   assert.deepEqual(campanhas.comCupomPrimeiro(lista).map((p) => p.id), ['b', 'd', 'a', 'c']);
 });
 
+test('revisão: campanha enxerga além de 100 produtos e não enche a fila do grupo', async () => {
+  const grupo = repos.channelRepository.create({
+    nome: 'Muitos', identificador: 'muitos@g.us', status: 'ativo', hora_inicio: '00:00', hora_fim: '23:59', intervalo_minutos: 0,
+  });
+  const ids = [];
+  for (let i = 1; i <= 120; i += 1) {
+    ids.push(produtos.createProduct({
+      marketplace: 'demo', external_id: `MUITOS-${i}`, titulo_original: `Hidratante muitos ${i}`, preco_atual: 10 + i,
+      url_original: `https://exemplo.demo/muitos${i}`, quantidade_vendas: 1000 - i,
+    }).id);
+  }
+  // Os 100 primeiros (pela ordenação da campanha) já saíram neste grupo.
+  for (const id of ids.slice(0, 100)) {
+    repos.publicationRepository.create({ channel_id: grupo.id, product_id: id, mensagem: 'x', status: 'enviado', enviado_em: new Date().toISOString() });
+  }
+  const campanha = campanhas.createCampaign({
+    nome: 'Muitos', modo: 'palavras', status: 'ativa', filtros: { termo: 'hidratante muitos', ordenacao: 'vendas' },
+    canais: [grupo.id], template_id: template.id, hora_inicio: '00:00', hora_fim: '23:59',
+  });
+  const r = await campanhas.runCampaign(campanha);
+  assert.equal(r.enfileiradas, 1, `achou produto depois do 100º: ${JSON.stringify(r.ignorados)}`);
+  const fila = repos.publicationRepository.list({ filters: { channel_id: grupo.id, status: 'aguardando' } });
+  assert.ok(ids.slice(100).includes(fila[0].product_id));
+
+  // Rodada seguinte com o post ainda na fila: não enfileira outro.
+  const r2 = await campanhas.runCampaign(campanhas.getCampaign(campanha.id), { reference: new Date(Date.now() + 3600000) });
+  assert.equal(r2.enfileiradas, 0);
+  assert.ok(r2.ignorados.some((i) => i.motivo === 'fila_com_pendentes'), JSON.stringify(r2));
+});
+
+test('"Disparar agora" fora do horário do grupo sai assim mesmo; grupo pausado segura', async () => {
+  const fechado = repos.channelRepository.create({
+    nome: 'Fechado agora', identificador: 'fechado-agora@g.us', status: 'ativo', hora_inicio: '03:00', hora_fim: '03:01', intervalo_minutos: 60,
+  });
+  const meioDia = new Date('2026-01-01T15:00:00Z');
+  const pub = repos.publicationRepository.create({
+    channel_id: fechado.id, mensagem: 'oferta agora', status: 'aguardando', tentativas: 0, dry_run: true,
+    lote: 'agora:cmp_x:1', agendado_para: new Date(meioDia - 1000).toISOString(),
+  });
+  const r = await publicacoes.processQueue({ limite: 50, reference: meioDia });
+  assert.equal(r.detalhes.find((d) => d.id === pub.id)?.status, 'enviada');
+
+  repos.channelRepository.update(fechado.id, { status: 'pausado' });
+  const outro = repos.publicationRepository.create({
+    channel_id: fechado.id, mensagem: 'oferta agora 2', status: 'aguardando', tentativas: 0, dry_run: true,
+    lote: 'agora:cmp_x:2', agendado_para: new Date(meioDia - 1000).toISOString(),
+  });
+  const r2 = await publicacoes.processQueue({ limite: 50, reference: meioDia });
+  assert.equal(r2.detalhes.find((d) => d.id === outro.id)?.motivo, 'canal_pausado');
+});
+
 test.after(() => {
   closeDb();
   for (const sufixo of ['', '-wal', '-shm']) {

@@ -8,7 +8,8 @@ import {
   campaignRepository, campaignTargetRepository, channelRepository,
   productRepository, promotionRepository, savedSearchRepository, publicationRepository,
 } from '../repositories/index.js';
-import { enqueue, isDuplicate, channelWindowOpen } from './publicationService.js';
+import { enqueue, channelWindowOpen } from './publicationService.js';
+import { cupomDaLojaValido } from './templateService.js';
 import { activePromotionFor } from './promotionService.js';
 import { bestCouponFor } from './couponService.js';
 import { config } from '../../config/index.js';
@@ -22,6 +23,12 @@ const log = logger.child('campanha');
 
 /** Prefixo do lote pedido no botao "Disparar agora" (ver publicationService). */
 export const LOTE_IMEDIATO = 'agora:';
+
+/**
+ * Quantos produtos a campanha considera. Era 100: com a coleta automatica
+ * trazendo ~75 a cada 6 h, os produtos alem dos 100 primeiros nunca saiam.
+ */
+const MAX_CANDIDATOS = 1000;
 
 /** Quantos produtos a campanha tenta por grupo quando o primeiro esta bloqueado. */
 const TENTATIVAS_POR_CANAL = 5;
@@ -270,7 +277,7 @@ export async function runCampaign(campanha, {
   const alvos = campaignTargetRepository.list({ filters: { campaign_id: campanha.id, ativo: 1 }, limit: 50 });
   if (!alvos.length) return { ...resultado, ignorado: 'sem_canais' };
 
-  const candidatos = comCupomPrimeiro(selectProducts(campanha, { limite: 100 }));
+  const candidatos = comCupomPrimeiro(selectProducts(campanha, { limite: MAX_CANDIDATOS }));
   if (!candidatos.length) return { ...resultado, ignorado: 'sem_produtos' };
 
   const porRodada = limitarPorRodada(quantidade ?? campanha.produtos_por_rodada);
@@ -304,7 +311,19 @@ export async function runCampaign(campanha, {
     const quantidade = alvo.limite_diario
       ? Math.min(porRodada, Number(alvo.limite_diario) - publicadasHoje({ campaign_id: campanha.id, channel_id: canal.id }, reference))
       : porRodada;
-    const livres = candidatos.filter((p) => !isDuplicate(p.id, canal.id, dias));
+    // A campanha anda no ritmo do grupo: com post dela ainda esperando na fila
+    // deste grupo, nao enfileira outro (campanha a cada 30 min e grupo a cada
+    // 60 enchiam a fila sem parar, e os posts saiam com horas de atraso).
+    if (!forcar && publicationRepository.count({
+      campaign_id: campanha.id, channel_id: canal.id, status: ['aguardando', 'enviando'],
+    })) {
+      resultado.ignorados.push({ canal: canal.nome, motivo: 'fila_com_pendentes' });
+      continue;
+    }
+
+    // Uma consulta por grupo (isDuplicate por produto eram 2 por produto).
+    const usados = produtosUsadosNoCanal(canal.id, dias);
+    const livres = candidatos.filter((p) => !usados.has(p.id));
 
     if (!livres.length) {
       // Loop desligado + lista esgotada = campanha cumpriu seu papel.
@@ -369,10 +388,25 @@ export async function runCampaign(campanha, {
  * ordem da campanha (sort estavel).
  */
 export function comCupomPrimeiro(produtos) {
-  const temCupom = (p) => (p.tags || []).includes('cupom-ml') || Boolean(bestCouponFor(p));
+  const temCupom = (p) => cupomDaLojaValido(p) || Boolean(bestCouponFor(p));
   return produtos.map((p) => ({ p, c: temCupom(p) }))
     .sort((a, b) => Number(b.c) - Number(a.c))
     .map(({ p }) => p);
+}
+
+/**
+ * Produtos que nao podem sair de novo neste grupo agora: na fila, ou enviados
+ * dentro do "nao repetir por". Mesma regra do isDuplicate, numa consulta so.
+ */
+function produtosUsadosNoCanal(canalId, dias) {
+  const desde = new Date(Date.now() - Math.max(Number(dias) || 0, 0) * 86400000).toISOString();
+  const linhas = publicationRepository.raw(
+    `SELECT DISTINCT product_id FROM publications
+     WHERE channel_id = ? AND product_id IS NOT NULL
+       AND (status IN ('aguardando', 'enviando') OR (? > 0 AND status = 'enviado' AND enviado_em >= ?))`,
+    [canalId, Number(dias) || 0, desde],
+  );
+  return new Set(linhas.map((l) => l.product_id));
 }
 
 /** Posts da campanha criados hoje (na fila ou enviados; cancelado não conta). */
@@ -400,7 +434,7 @@ export function campaignProgress(campanha, reference = new Date()) {
 
   const alvos = campaignTargetRepository.list({ filters: { campaign_id: campanha.id, ativo: 1 }, limit: 50 });
   const dias = Number(campanha.nao_repetir_dias ?? 7);
-  const candidatos = selectProducts(campanha, { limite: 100 });
+  const candidatos = selectProducts(campanha, { limite: MAX_CANDIDATOS });
   const situacoes = situacaoDosProdutos(candidatos, alvos.map((a) => a.channel_id), dias);
   const postados = candidatos.filter((p) => situacoes[p.id]?.postado_em).length;
   const naFila = candidatos.filter((p) => situacoes[p.id]?.na_fila && !situacoes[p.id]?.postado_em).length;

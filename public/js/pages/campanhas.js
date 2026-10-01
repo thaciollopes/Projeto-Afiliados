@@ -329,6 +329,7 @@ const MOTIVOS = {
   aguardando_intervalo: 'ainda dentro do intervalo entre posts',
   sem_canais: 'a campanha não tem grupos',
   sem_produtos: 'nenhum produto atende aos filtros',
+  fila_com_pendentes: 'o post anterior desta campanha ainda está esperando na fila do grupo',
   todos_ja_publicados: 'todos os produtos já foram publicados nesses grupos (ou estão na fila)',
   lista_esgotada_campanha_encerrada: 'a lista acabou e a campanha foi encerrada (loop desligado)',
   canal_pausado: 'o grupo está pausado',

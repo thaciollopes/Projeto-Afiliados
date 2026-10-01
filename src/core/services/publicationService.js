@@ -308,7 +308,10 @@ export async function processQueue({ limite = 10, reference = new Date(), forcar
 
     if (!forcar) {
       const janela = channelWindowOpen(canal, reference);
-      if (!janela.aberto) {
+      // "Disparar agora" foi pedido por voce: so o horario do grupo nao segura
+      // (grupo pausado continua segurando).
+      const liberadoPeloDisparo = ehImediato(pub) && janela.motivo === 'fora_do_horario';
+      if (!janela.aberto && !liberadoPeloDisparo) {
         resultado.adiadas += 1;
         resultado.detalhes.push({ id: pub.id, status: 'adiada', motivo: janela.motivo });
         continue;
@@ -623,7 +626,7 @@ export function previsaoDaFila(pubs, reference = new Date()) {
       quando = Date.parse(pub.agendado_para);
       motivo = 'agendada';
     }
-    if (!dentroDoHorario(canal.hora_inicio, canal.hora_fim, new Date(quando), tz)) {
+    if (!ehImediato(pub) && !dentroDoHorario(canal.hora_inicio, canal.hora_fim, new Date(quando), tz)) {
       resultado[pub.id] = { motivo: `fora do horário do grupo (${canal.hora_inicio}–${canal.hora_fim}) — sai na próxima abertura`, previsto: null };
       continue;
     }

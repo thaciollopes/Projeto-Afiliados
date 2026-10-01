@@ -35,8 +35,22 @@ export const VARIAVEIS_DISPONIVEIS = [
   { nome: 'menor_preco', descricao: 'Selo "Menor preco que registramos em 30 dias" (so com historico que prove)' },
 ];
 
+/** Cupom do ML visto na oferta ha mais que isto nao e anunciado (pode ter acabado). */
+const VALIDADE_CUPOM_LOJA_MS = 24 * 3600000;
+
+/**
+ * O "com Cupom" foi visto na oferta recentemente? A marca so sai quando o
+ * produto reaparece nas ofertas sem cupom; produto que nao reaparece ficava
+ * anunciando cupom para sempre. Sem data de atualizacao, vale (cadastro na hora).
+ */
+export function cupomDaLojaValido(product, reference = new Date()) {
+  if (!(product?.tags || []).includes('cupom-ml')) return false;
+  const visto = Date.parse(product.data_atualizacao || '');
+  return Number.isNaN(visto) || reference.getTime() - visto <= VALIDADE_CUPOM_LOJA_MS;
+}
+
 function temCupomDaLoja(product, cupom) {
-  return !cupom?.codigo && (product.tags || []).includes('cupom-ml');
+  return !cupom?.codigo && cupomDaLojaValido(product);
 }
 
 function textoCupomDaLoja(product, cupom, money) {

@@ -4,7 +4,9 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { renderTemplate, buildContext, DEFAULT_TEMPLATE_BODY } from '../src/core/services/templateService.js';
+import {
+  renderTemplate, buildContext, DEFAULT_TEMPLATE_BODY, cupomDaLojaValido,
+} from '../src/core/services/templateService.js';
 import { calculatePricing } from '../src/core/services/pricingService.js';
 
 const emDias = (d) => new Date(Date.now() + d * 86400000).toISOString();
@@ -123,4 +125,15 @@ test('modelo padrão: sem quantidade vendida não sai "🛒  vendidos" sozinho',
   const texto = renderTemplate(DEFAULT_TEMPLATE_BODY, buildContext({ product: p, pricing: calculatePricing({ product: p }) }));
   assert.match(texto, /Nota 4\.6/);
   assert.doesNotMatch(texto, /vendidos/);
+});
+
+test('cupom do ML visto há mais de 24h não é anunciado (pode ter acabado)', () => {
+  const velho = {
+    titulo_original: 'Perfume', preco_atual: 100, preco_cupom_loja: 80, tags: ['cupom-ml'],
+    data_atualizacao: new Date(Date.now() - 2 * 86400000).toISOString(),
+  };
+  assert.equal(cupomDaLojaValido(velho), false);
+  const texto = renderTemplate(DEFAULT_TEMPLATE_BODY, buildContext({ product: velho, pricing: calculatePricing({ product: velho }) }));
+  assert.doesNotMatch(texto, /cupom/i);
+  assert.equal(cupomDaLojaValido({ ...velho, data_atualizacao: new Date().toISOString() }), true);
 });
