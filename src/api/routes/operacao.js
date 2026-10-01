@@ -111,10 +111,15 @@ campanhasRouter.post('/:id/pausar', asyncHandler(async (req, res) => {
 /** Roda agora, ignorando intervalo/horario se forcar=true. */
 campanhasRouter.post('/:id/executar', asyncHandler(async (req, res) => {
   const campanha = getCampaign(req.params.id);
-  res.json(await runCampaign(campanha, {
-    forcar: req.body?.forcar !== false,
+  const forcar = req.body?.forcar !== false;
+  const resultado = await runCampaign(campanha, {
+    forcar,
     quantidade: req.body?.quantidade ?? null,
-  }));
+    imediato: forcar,
+  });
+  // Ja chama a fila: o primeiro sai agora, os outros com a pausa entre envios.
+  if (resultado.enfileiradas) processQueue().catch(() => { /* o worker tenta no proximo ciclo */ });
+  res.json(resultado);
 }));
 
 /** Chamado pelo n8n: roda todas as campanhas ativas. */

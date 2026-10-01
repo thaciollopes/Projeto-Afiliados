@@ -429,18 +429,20 @@ test('lote: 3 produtos por rodada saem em sequência, sem esperar o intervalo do
     produtos_por_rodada: 3, limite_diario: 4, template_id: template.id,
   });
 
-  const r = await campanhas.runCampaign(campanha, { forcar: true });
-  assert.equal(r.enfileiradas, 3);
-  const doLote = repos.publicationRepository.list({ filters: { channel_id: grupo.id } });
-  assert.equal(new Set(doLote.map((p) => p.lote)).size, 1, 'os 3 do mesmo lote');
-
-  // Grupo acabou de receber um post do lote: o próximo do mesmo lote não espera 60 min.
-  repos.publicationRepository.update(doLote[0].id, { status: 'enviado', enviado_em: new Date().toISOString() });
-  repos.channelRepository.update(grupo.id, { ultimo_envio: new Date().toISOString() });
   const dryRun = config.runtime.dryRun;
   config.runtime.dryRun = false;
   publicacoes.zerarPausaEntreEnvios();
+  let doLote;
   try {
+    const r = await campanhas.runCampaign(campanha, { forcar: true });
+    assert.equal(r.enfileiradas, 3);
+    doLote = repos.publicationRepository.list({ filters: { channel_id: grupo.id } });
+    assert.equal(new Set(doLote.map((p) => p.lote)).size, 1, 'os 3 do mesmo lote');
+    assert.ok(doLote.every((p) => !p.dry_run), 'posts reais (simulado não espera intervalo)');
+
+    // Grupo acabou de receber um post do lote: o próximo do mesmo lote não espera 60 min.
+    repos.publicationRepository.update(doLote[0].id, { status: 'enviado', enviado_em: new Date().toISOString() });
+    repos.channelRepository.update(grupo.id, { ultimo_envio: new Date().toISOString() });
     const fila = await publicacoes.processQueue({ limite: 10 });
     const doGrupo = fila.detalhes.filter((d) => doLote.some((p) => p.id === d.id));
     assert.ok(!doGrupo.some((d) => d.motivo === 'aguardando_intervalo_grupo'), 'lote não espera o intervalo do grupo');
@@ -509,6 +511,39 @@ test('fila diz por que o post espera e quando sai; grupo não tem teto diário',
   const entreBeC = (Date.parse(prev[c.id].previsto) - Date.parse(prev[b.id].previsto)) / 60000;
   assert.equal(Math.round(entreBeC), 60, 'sem teto diário no grupo: o terceiro também sai');
   assert.equal(publicacoes.channelWindowOpen({ ...grupo, limite_diario: 1 }, agora).aberto, true, 'limite antigo no grupo é ignorado');
+});
+
+test('"Disparar agora" não espera o intervalo do grupo', async () => {
+  const grupo = repos.channelRepository.create({
+    nome: 'Agora', identificador: 'agora@g.us', status: 'ativo', hora_inicio: '00:00', hora_fim: '23:59',
+    intervalo_minutos: 60, ultimo_envio: new Date().toISOString(),
+  });
+  for (let i = 1; i <= 2; i += 1) {
+    produtos.createProduct({
+      marketplace: 'demo', external_id: `AGORA-${i}`, titulo_original: `Esmalte agora ${i}`, preco_atual: 9 + i,
+      url_original: `https://exemplo.demo/agora${i}`,
+    });
+  }
+  const campanha = campanhas.createCampaign({
+    nome: 'Agora', modo: 'palavras', status: 'ativa', filtros: { termo: 'esmalte agora' }, canais: [grupo.id], template_id: template.id,
+  });
+  // Modo real desde a fila: post simulado nunca espera intervalo e o teste não provaria nada.
+  const dryRun = config.runtime.dryRun;
+  config.runtime.dryRun = false;
+  publicacoes.zerarPausaEntreEnvios();
+  try {
+    const r = await campanhas.runCampaign(campanha, { forcar: true, quantidade: 2, imediato: true });
+    assert.equal(r.enfileiradas, 2);
+    const fila = await publicacoes.processQueue({ limite: 10 });
+    const doGrupo = repos.publicationRepository.list({ filters: { channel_id: grupo.id } }).map((p) => p.id);
+    const meus = fila.detalhes.filter((d) => doGrupo.includes(d.id));
+    assert.equal(meus.length, 2);
+    // Só pode esperar a pausa curta entre envios reais (global), nunca os 60 min do grupo.
+    assert.ok(meus.every((d) => d.status === 'enviada' || d.motivo === 'pausa_entre_envios'), JSON.stringify(meus));
+  } finally {
+    config.runtime.dryRun = dryRun;
+    publicacoes.zerarPausaEntreEnvios();
+  }
 });
 
 test.after(() => {

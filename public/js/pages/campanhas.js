@@ -98,7 +98,7 @@ export async function renderCampanhas() {
   function disparar(campanha) {
     const form = formulario([{
       nome: 'quantidade', rotulo: 'Quantos produtos por grupo', tipo: 'select', opcoes: QUANTIDADES,
-      dica: 'saem um depois do outro, com pausa de ~1 min entre eles; respeita o máximo por dia do grupo',
+      dica: 'saem já, um depois do outro, com pausa de ~1 min entre eles (não espera o intervalo do grupo)',
     }], { quantidade: campanha.produtos_por_rodada || 1 });
     modal({
       titulo: `Disparar "${campanha.nome}" agora`,
@@ -116,7 +116,7 @@ export async function renderCampanhas() {
   async function rodar(campanha, quantidade) {
     const r = await tentar(() => api.post(`/campanhas/${campanha.id}/executar`, { forcar: true, quantidade }));
     if (!r) return;
-    if (r.enfileiradas) ok(`${r.enfileiradas} publicação(ões) na fila`);
+    if (r.enfileiradas) ok(`🚀 ${r.enfileiradas} produto(s) saindo agora — um a cada ~1 min. Acompanhe na Fila.`);
     else {
       const motivos = r.ignorado ? [r.ignorado] : [...new Set((r.ignorados || []).map((i) => i.motivo))];
       const erros = (r.erros || []).map((e) => e.erro);

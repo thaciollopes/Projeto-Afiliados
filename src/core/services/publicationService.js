@@ -362,8 +362,14 @@ export async function processQueue({ limite = 10, reference = new Date(), forcar
   return resultado;
 }
 
+/** Lote do botao "Disparar agora": voce mandou sair ja (fica so a pausa curta entre posts). */
+function ehImediato(pub) {
+  return String(pub.lote || '').startsWith('agora:');
+}
+
 /** O ultimo post que saiu neste grupo e do mesmo lote desta publicacao? */
 function continuaLote(pub, canal) {
+  if (ehImediato(pub)) return true;
   if (!pub.lote) return false;
   const ultimo = publicationRepository.findAll({
     filters: { channel_id: canal.id, status: 'enviado' },
@@ -603,10 +609,11 @@ export function previsaoDaFila(pubs, reference = new Date()) {
     }
     const g = porCanal.get(canal.id);
 
-    const mesmoLote = pub.lote && pub.lote === g.lote;
+    const mesmoLote = ehImediato(pub) || (pub.lote && pub.lote === g.lote);
     const espera = mesmoLote ? pausaMediaMs() : Number(canal.intervalo_minutos || 0) * 60000;
     let quando = Math.max(agora, g.livreEm ? g.livreEm + espera : agora);
-    let motivo = mesmoLote ? 'mesmo lote: sai logo depois do anterior' : 'na vez: sai no próximo ciclo';
+    let motivo = ehImediato(pub) ? 'disparo imediato: sai em instantes'
+      : mesmoLote ? 'mesmo lote: sai logo depois do anterior' : 'na vez: sai no próximo ciclo';
     if (!mesmoLote && g.livreEm && g.livreEm + espera > agora) motivo = `intervalo do grupo (${canal.intervalo_minutos} min entre posts)`;
     if (pub.status === 'erro' && pub.proxima_tentativa && Date.parse(pub.proxima_tentativa) > quando) {
       quando = Date.parse(pub.proxima_tentativa);

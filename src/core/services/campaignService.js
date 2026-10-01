@@ -20,6 +20,9 @@ import { notFound, badRequest } from '../utils/errors.js';
 
 const log = logger.child('campanha');
 
+/** Prefixo do lote pedido no botao "Disparar agora" (ver publicationService). */
+export const LOTE_IMEDIATO = 'agora:';
+
 /** Quantos produtos a campanha tenta por grupo quando o primeiro esta bloqueado. */
 const TENTATIVAS_POR_CANAL = 5;
 
@@ -254,7 +257,9 @@ export function canRunNow(campanha, reference = new Date()) {
  * Executa uma campanha: escolhe produto por canal e enfileira.
  * Nao envia; o worker envia depois respeitando a janela do canal.
  */
-export async function runCampaign(campanha, { reference = new Date(), forcar = false, quantidade = null } = {}) {
+export async function runCampaign(campanha, {
+  reference = new Date(), forcar = false, quantidade = null, imediato = false,
+} = {}) {
   const resultado = { campanha: campanha.id, nome: campanha.nome, enfileiradas: 0, ignorados: [], erros: [] };
 
   if (!forcar) {
@@ -269,7 +274,8 @@ export async function runCampaign(campanha, { reference = new Date(), forcar = f
   if (!candidatos.length) return { ...resultado, ignorado: 'sem_produtos' };
 
   const porRodada = limitarPorRodada(quantidade ?? campanha.produtos_por_rodada);
-  const lote = `${campanha.id}:${Date.now()}`;
+  // "Disparar agora": o lote leva a marca e a fila nao segura pelo intervalo do grupo.
+  const lote = `${imediato ? LOTE_IMEDIATO : ''}${campanha.id}:${Date.now()}`;
   let vagasDaCampanha = campanha.limite_diario
     ? Number(campanha.limite_diario) - publicadasHoje({ campaign_id: campanha.id }, reference)
     : Infinity;
