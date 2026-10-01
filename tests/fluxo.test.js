@@ -484,6 +484,32 @@ test('coleta automática: liga na primeira busca, respeita o intervalo e não ro
   assert.equal(coleta.configColeta().buscas.length, 0);
 });
 
+test('fila diz por que o post espera e quando sai (intervalo do grupo, limite do dia)', () => {
+  const agora = new Date();
+  const grupo = repos.channelRepository.create({
+    nome: 'Previsão', identificador: 'prev@g.us', status: 'ativo', hora_inicio: '00:00', hora_fim: '23:59',
+    intervalo_minutos: 60, limite_diario: 3, ultimo_envio: new Date(agora - 10 * 60000).toISOString(),
+  });
+  repos.publicationRepository.create({
+    channel_id: grupo.id, mensagem: 'já foi', status: 'enviado', enviado_em: new Date(agora - 10 * 60000).toISOString(),
+  });
+  const criar = (lote) => repos.publicationRepository.create({
+    channel_id: grupo.id, mensagem: 'oferta', status: 'aguardando', tentativas: 0, lote, agendado_para: agora.toISOString(),
+  });
+  const a = criar('L1');
+  const b = criar('L2');
+  const c = criar('L3');
+  const prev = publicacoes.previsaoDaFila([a, b, c], agora);
+
+  assert.match(prev[a.id].motivo, /intervalo do grupo/);
+  const minutosA = (Date.parse(prev[a.id].previsto) - agora) / 60000;
+  assert.ok(minutosA > 49 && minutosA < 51, `sai ~50 min depois: ${minutosA}`);
+  const entreAeB = (Date.parse(prev[b.id].previsto) - Date.parse(prev[a.id].previsto)) / 60000;
+  assert.equal(Math.round(entreAeB), 60, 'outro lote espera o intervalo inteiro');
+  assert.equal(prev[c.id].previsto, null);
+  assert.match(prev[c.id].motivo, /limite do dia/);
+});
+
 test.after(() => {
   closeDb();
   for (const sufixo of ['', '-wal', '-shm']) {

@@ -17,7 +17,7 @@ import {
 } from '../../core/services/campaignService.js';
 import {
   buildPublication, enqueue, processQueue, sendPublication, cancelPublication,
-  retryPublication, publicationStats, channelWindowOpen,
+  retryPublication, publicationStats, channelWindowOpen, previsaoDaFila,
 } from '../../core/services/publicationService.js';
 import { getWhatsAppProvider, resetWhatsAppProvider } from '../../integrations/whatsapp/index.js';
 import { assinaturaWebhookValida, lerMensagemDoWebhook } from '../../integrations/whatsapp/wahaProvider.js';
@@ -146,7 +146,8 @@ publicacoesRouter.get('/fila', asyncHandler(async (req, res) => {
     sort: 'agendado_para ASC',
     limit: Number(req.query.limite) || 100,
   });
-  resultado.rows = resultado.rows.map(expandirPublicacao);
+  const previsao = previsaoDaFila(resultado.rows);
+  resultado.rows = resultado.rows.map((p) => ({ ...expandirPublicacao(p), previsao: previsao[p.id] || null }));
   res.json(resultado);
 }));
 

@@ -566,6 +566,86 @@ function marcarErro(pub, mensagem, definitivo) {
   }
 }
 
+// --------------------------------------------------------------- previsao --
+
+/** Pausa media entre dois posts do mesmo lote (ENVIO_PAUSA_MIN/MAX). */
+function pausaMediaMs() {
+  const min = Number(config.envio.pausaMinSegundos) || 0;
+  const max = Math.max(min, Number(config.envio.pausaMaxSegundos) || 0);
+  return ((min + max) / 2) * 1000;
+}
+
+/**
+ * Por que cada post da fila ainda nao saiu e quando deve sair. Simula o grupo
+ * na ordem da fila: intervalo do grupo entre lotes, pausa curta dentro do lote,
+ * limite do dia e horario. E uma estimativa para a tela — quem decide e a fila.
+ * @returns {Object<string, {motivo:string, previsto:string|null}>} por id
+ */
+export function previsaoDaFila(pubs, reference = new Date()) {
+  const agora = reference.getTime();
+  const tz = config.app.timezone;
+  const porCanal = new Map();
+  const resultado = {};
+
+  for (const pub of pubs) {
+    if (!['aguardando', 'erro'].includes(pub.status)) continue;
+    if (pub.status === 'erro' && Number(pub.tentativas) >= MAX_TENTATIVAS) {
+      resultado[pub.id] = { motivo: 'falhou de vez — use 🔁 para tentar de novo', previsto: null };
+      continue;
+    }
+    const canal = channelRepository.findById(pub.channel_id);
+    if (!canal) continue;
+    if (canal.status !== 'ativo') {
+      resultado[pub.id] = { motivo: 'grupo pausado', previsto: null };
+      continue;
+    }
+
+    if (!porCanal.has(canal.id)) {
+      const ultimo = publicationRepository.findAll({
+        filters: { channel_id: canal.id, status: 'enviado' }, sort: 'enviado_em DESC', limit: 1,
+      }).rows[0];
+      const enviadasHoje = canal.limite_diario ? publicationRepository.count({
+        channel_id: canal.id, status: 'enviado', enviado_em: { gte: inicioDoDiaIso(reference, tz) },
+      }) : 0;
+      porCanal.set(canal.id, {
+        livreEm: canal.ultimo_envio ? Date.parse(canal.ultimo_envio) : 0,
+        lote: ultimo?.lote || null,
+        vagas: canal.limite_diario ? Number(canal.limite_diario) - enviadasHoje : Infinity,
+      });
+    }
+    const g = porCanal.get(canal.id);
+
+    if (g.vagas <= 0) {
+      resultado[pub.id] = { motivo: `limite do dia do grupo atingido (${canal.limite_diario}) — sai amanhã a partir das ${canal.hora_inicio || '00:00'}`, previsto: null };
+      continue;
+    }
+
+    const mesmoLote = pub.lote && pub.lote === g.lote;
+    const espera = mesmoLote ? pausaMediaMs() : Number(canal.intervalo_minutos || 0) * 60000;
+    let quando = Math.max(agora, g.livreEm ? g.livreEm + espera : agora);
+    let motivo = mesmoLote ? 'mesmo lote: sai logo depois do anterior' : 'na vez: sai no próximo ciclo';
+    if (!mesmoLote && g.livreEm && g.livreEm + espera > agora) motivo = `intervalo do grupo (${canal.intervalo_minutos} min entre posts)`;
+    if (pub.status === 'erro' && pub.proxima_tentativa && Date.parse(pub.proxima_tentativa) > quando) {
+      quando = Date.parse(pub.proxima_tentativa);
+      motivo = 'deu erro: nova tentativa automática';
+    }
+    if (pub.agendado_para && Date.parse(pub.agendado_para) > quando) {
+      quando = Date.parse(pub.agendado_para);
+      motivo = 'agendada';
+    }
+    if (!dentroDoHorario(canal.hora_inicio, canal.hora_fim, new Date(quando), tz)) {
+      resultado[pub.id] = { motivo: `fora do horário do grupo (${canal.hora_inicio}–${canal.hora_fim}) — sai na próxima abertura`, previsto: null };
+      continue;
+    }
+
+    resultado[pub.id] = { motivo, previsto: new Date(quando).toISOString() };
+    g.livreEm = quando;
+    g.lote = pub.lote || null;
+    g.vagas -= 1;
+  }
+  return resultado;
+}
+
 // ------------------------------------------------------------- manutencao --
 
 export function cancelPublication(id) {

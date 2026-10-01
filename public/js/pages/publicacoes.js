@@ -38,7 +38,7 @@ export async function renderFila() {
       ${kpi('Aguardando', stats.na_fila)}
       ${kpi('Enviadas hoje', stats.enviadas_hoje, 'ok')}
       ${kpi('Erros', stats.erros, stats.erros ? 'erro' : '')}
-      ${kpi('Próxima', stats.proxima_publicacao ? dataHora(stats.proxima_publicacao.agendado_para).slice(-5) : '—')}`;
+      ${kpi('Próxima', proximaPrevista(fila.rows))}`;
 
     area.innerHTML = '';
     area.appendChild(tabelaPublicacoes(fila.rows, carregar, true));
@@ -106,6 +106,19 @@ export async function renderHistorico() {
 
 // ---------------------------------------------------------------- comum --
 
+/** "~11:31" + o motivo da espera, em palavras. */
+function quandoSai(p) {
+  const v = p.previsao;
+  if (!v) return dataHora(p.agendado_para);
+  const hora = v.previsto ? `<strong>~${dataHora(v.previsto).slice(-5)}</strong>` : '<strong>—</strong>';
+  return `${hora}<br><span class="pequeno texto-fraco">⏳ ${escapar(v.motivo)}</span>`;
+}
+
+function proximaPrevista(linhas) {
+  const datas = linhas.map((p) => p.previsao?.previsto).filter(Boolean).sort();
+  return datas.length ? `~${dataHora(datas[0]).slice(-5)}` : '—';
+}
+
 function tabelaPublicacoes(linhas, recarregar, ehFila) {
   return tabela({
     vazio: ehFila ? 'Fila vazia.' : 'Nenhuma publicação ainda.',
@@ -116,7 +129,9 @@ function tabelaPublicacoes(linhas, recarregar, ehFila) {
       },
       { rotulo: 'Destino', render: (p) => escapar(p.canal_nome) },
       { rotulo: 'Preço', render: (p) => `${moeda(p.preco_final_publicado)}${p.cupom_publicado ? `<br><span class="pequeno texto-fraco">cupom ${escapar(p.cupom_publicado)}</span>` : ''}` },
-      { rotulo: ehFila ? 'Agendado' : 'Enviado', render: (p) => dataHora(ehFila ? p.agendado_para : p.enviado_em) },
+      ehFila
+        ? { rotulo: 'Quando sai', render: (p) => quandoSai(p) }
+        : { rotulo: 'Enviado', render: (p) => dataHora(p.enviado_em) },
       { rotulo: 'Tent.', render: (p) => p.tentativas || 0 },
       {
         rotulo: 'Status',
